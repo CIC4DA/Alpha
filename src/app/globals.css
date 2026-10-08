@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+:root {
+  --font-hanken: "Hanken Grotesk Variable";
+  --font-newsreader: "Newsreader Variable";
+  --font-jetbrains: "JetBrains Mono Variable";
+  --paper: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #18202e;
+  --ink-2: #4b5567;
+  --ink-3: #7a8496;
+  --line: #dde2ea;
+  --line-strong: #c3cad6;
+  --blue: #2350d8;
+  --blue-ink: #1a3fae;
+  --blue-wash: #eaeffd;
+  --green: #1c7c54;
+  --green-wash: #e5f3ec;
+  --amber: #9a5d08;
+  --amber-wash: #fbf0dc;
+  --red: #b3392a;
+  --red-wash: #fbe9e6;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-blue: var(--blue);
+  --color-blue-ink: var(--blue-ink);
+  --color-blue-wash: var(--blue-wash);
+  --color-green: var(--green);
+  --color-green-wash: var(--green-wash);
+  --color-amber: var(--amber);
+  --color-amber-wash: var(--amber-wash);
+  --color-red: var(--red);
+  --color-red-wash: var(--red-wash);
+  --font-sans: var(--font-hanken);
+  --font-serif: var(--font-newsreader);
+  --font-mono: var(--font-jetbrains);
+}
+
+html, body { background: var(--paper); color: var(--ink); }
+body { font-family: var(--font-hanken), system-ui, sans-serif; font-feature-settings: "ss01", "cv11"; }
+
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+@keyframes appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.appear { animation: appear 240ms ease-out both; }
+@keyframes pulse-dot { 0%, 100% { opacity: .35 } 50% { opacity: 1 } }
+.pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }

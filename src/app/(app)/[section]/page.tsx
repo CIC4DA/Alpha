@@ -1,0 +1,57 @@
+import { notFound } from "next/navigation";
+
+const SECTIONS: Record<string, { title: string; lead: string; points: string[] }> = {
+  agents: {
+    title: "Agents",
+    lead: "Every agent across your organisation's projects, so a good one can be reused instead of rebuilt.",
+    points: [
+      "Each agent is a GitAgent folder in its project's repo: identity, rules, tools, model and memory as plain files.",
+      "See which projects use an agent, its model, its test pass rate and its cost per run.",
+      "Publish an agent to your organisation so other builders can add it to their projects.",
+    ],
+  },
+  connections: {
+    title: "Connections",
+    lead: "Accounts and services your apps use, connected once for the whole organisation.",
+    points: [
+      "Gmail, Outlook, Slack, Google Drive, Salesforce and more, each showing exactly what it allows (for example, send-only).",
+      "Tokens are kept in a vault and added on the way out by the egress proxy; app code never sees them.",
+      "See which projects use each connection, and revoke it in one place.",
+    ],
+  },
+  explore: {
+    title: "Explore",
+    lead: "Ideas and learning, in one place instead of eight sidebar entries.",
+    points: [
+      "The AI consultant: tell it your role and your weekly bottlenecks, get app ideas with estimated time saved.",
+      "Templates and the prompt library, each tested end to end.",
+      "The marketplace, guides and the community.",
+    ],
+  },
+  help: {
+    title: "Help",
+    lead: "Guides, support and what's new.",
+    points: ["Getting-started guide for builders, developers and approvers.", "Contact support.", "Changelog."],
+  },
+};
+
+export default async function SectionPage({ params }: { params: Promise<{ section: string }> }) {
+  const { section } = await params;
+  const s = SECTIONS[section];
+  if (!s) notFound();
+  return (
+    <div className="mx-auto max-w-[760px] px-8 py-12">
+      <h1 className="text-2xl font-semibold tracking-tight">{s.title}</h1>
+      <p className="mt-1 text-ink-2">{s.lead}</p>
+      <div className="mt-8 rounded-lg border border-line bg-surface p-5">
+        <p className="text-sm font-semibold">What this page will hold</p>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-relaxed text-ink-2">
+          {s.points.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+        <p className="mt-4 text-[12px] text-ink-3">Described, not built, in this prototype. See the flows and screen map in the repo for the full design.</p>
+      </div>
+    </div>
+  );
+}
