@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Check, Loader2, ShieldCheck, ExternalLink, RotateCcw, AlertTriangle } from "lucide-react";
-import { RULE_CHECKS, RECEIPT, PLAN } from "@/lib/fixtures";
+import { RULE_CHECKS, RECEIPT, PLAN, CHANGE_COST } from "@/lib/fixtures";
 import type { Journey } from "@/lib/journey";
 import type { Project } from "@/lib/store";
 import { Button, money } from "../ui";
@@ -24,6 +24,7 @@ export function ShipCanvas({
   onRequestReview,
   onDeploy,
   onOpenApprover,
+  onApplyChanges,
 }: {
   project: Project;
   j: Journey;
@@ -31,8 +32,10 @@ export function ShipCanvas({
   onRequestReview: () => void;
   onDeploy: () => void;
   onOpenApprover: () => void;
+  onApplyChanges: () => void;
 }) {
   const [deploying, setDeploying] = useState(-1);
+  const [applying, setApplying] = useState(false);
   const blocked = j.demoData;
   const canDeploy = !blocked && (!approvalRequired || j.review === "approved");
 
@@ -51,7 +54,7 @@ export function ShipCanvas({
     setTimeout(tick, 900);
   };
 
-  if (project.stage === "live") return <LiveCanvas project={project} />;
+  if (project.stage === "live") return <LiveCanvas project={project} version={j.version} />;
 
   return (
     <div className="mx-auto max-w-[760px] px-8 py-8 appear">
@@ -104,10 +107,27 @@ export function ShipCanvas({
           )}
           {j.review === "approved" && <p className="flex items-center gap-2 text-sm text-green"><Check size={15} /> Approved. Ready to deploy.</p>}
           {j.review === "changes" && (
-            <p className="text-sm text-amber">
-              Changes requested: &ldquo;{j.reviewNote}&rdquo;. It&apos;s pinned in the chat as a to-do.
-            </p>
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm">
+                <span className="font-medium text-amber">Changes requested:</span> &ldquo;{j.reviewNote}&rdquo;
+              </p>
+              <Button
+                variant="primary"
+                className="shrink-0"
+                disabled={applying}
+                onClick={() => {
+                  setApplying(true);
+                  setTimeout(() => {
+                    onApplyChanges();
+                    setApplying(false);
+                  }, 2600);
+                }}
+              >
+                {applying ? <Loader2 size={15} className="animate-spin" /> : null} {applying ? `Making version ${j.version + 1}` : "Make this change"}
+              </Button>
+            </div>
           )}
+          {j.review === "none" && j.version > 1 && <p className="mt-2 text-[12px] text-ink-3">Version {j.version}: rebuilt only what changed, all checks pass again, {money(CHANGE_COST)}.</p>}
         </div>
       )}
 
@@ -136,8 +156,9 @@ export function ShipCanvas({
   );
 }
 
-function LiveCanvas({ project }: { project: Project }) {
-  const actual = RECEIPT.build + RECEIPT.tests + RECEIPT.fixes;
+function LiveCanvas({ project, version }: { project: Project; version: number }) {
+  const changes = (version - 1) * CHANGE_COST;
+  const actual = RECEIPT.build + RECEIPT.tests + RECEIPT.fixes + changes;
   return (
     <div className="mx-auto max-w-[760px] px-8 py-8 appear">
       <p className="text-[13px] text-green">Live</p>
@@ -161,6 +182,12 @@ function LiveCanvas({ project }: { project: Project }) {
             <dt className="text-ink-2">Fixes for our mistakes</dt>
             <dd>Free</dd>
           </div>
+          {changes > 0 && (
+            <div className="flex justify-between">
+              <dt className="text-ink-2">Changes the approver asked for</dt>
+              <dd>{money(changes)}</dd>
+            </div>
+          )}
           <div className="flex justify-between border-t border-line pt-2 font-semibold">
             <dt>Total</dt>
             <dd>{money(actual)}</dd>
@@ -176,7 +203,8 @@ function LiveCanvas({ project }: { project: Project }) {
         <ul className="mt-3 divide-y divide-line text-sm">
           <li className="flex items-center justify-between py-2">
             <span>
-              <span className="font-medium">v1</span> <span className="text-ink-2">First release: four screens, three agents, 6 checks passing</span>
+              <span className="font-medium">v{version}</span>{" "}
+              <span className="text-ink-2">{version > 1 ? "First release, with the approver's changes; 6 checks passing" : "First release: four screens, three agents, 6 checks passing"}</span>
             </span>
             <span className="text-[12px] text-green">Live</span>
           </li>

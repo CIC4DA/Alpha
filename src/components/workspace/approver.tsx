@@ -24,7 +24,7 @@ export function ApproverCanvas({ j, testsReady, onApprove, onChanges, approvalRe
   return (
     <div className="mx-auto max-w-[760px] px-8 py-8 appear">
       <p className="text-[13px] text-ink-3">{j.review === "requested" ? "Review requested by the builder" : "Approver view"}</p>
-      <h2 className="mt-1 text-2xl font-semibold tracking-tight">Loan Triage Desk, version 1</h2>
+      <h2 className="mt-1 text-2xl font-semibold tracking-tight">Loan Triage Desk, version {j.version}</h2>
       {!approvalRequired && (
         <p className="mt-3 rounded-md border border-line bg-surface px-3 py-2 text-[13px] text-ink-2">
           Your organisation doesn&apos;t require a separate approver, so the builder runs this as a self-check. Turn it on in Organisation settings.
@@ -34,6 +34,7 @@ export function ApproverCanvas({ j, testsReady, onApprove, onChanges, approvalRe
       <section className="mt-6">
         <h3 className="text-sm font-semibold">What changed</h3>
         <p className="mt-1 text-sm leading-relaxed text-ink-2">
+          {j.version > 1 && <>Version {j.version} makes the change you asked for: &ldquo;{j.reviewNote}&rdquo;. </>}
           First release. Officers upload application PDFs; three agents extract the facts, recommend a decision with cited policy clauses, and draft the email. Officers confirm facts and every send.
         </p>
       </section>
@@ -126,7 +127,7 @@ export function ApproverCanvas({ j, testsReady, onApprove, onChanges, approvalRe
               Request changes
             </Button>
             <Button variant="primary" onClick={onApprove} disabled={j.review !== "requested"}>
-              Approve version 1
+              Approve version {j.version}
             </Button>
           </div>
         )}

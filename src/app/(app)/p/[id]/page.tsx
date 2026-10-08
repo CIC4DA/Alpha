@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getOrg, getProject, updateProject, type Org, type Project, type Stage } from "@/lib/store";
 import { useJourney } from "@/lib/journey";
-import { BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN } from "@/lib/fixtures";
+import { BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
 import { TopBar, stageIndex, type View } from "@/components/workspace/topbar";
 import { ChatPane, type ChatItem, type Todo } from "@/components/workspace/chat";
 import { PlanCanvas } from "@/components/workspace/plan";
@@ -92,11 +92,8 @@ export default function WorkspacePage() {
       out.push({ kind: "architect", text: `5 of 6 checks pass. ${bw.firstRun.note} Fixing it is free.` });
     }
     if (j.testRun === "fixed") out.push({ kind: "architect", text: "Fixed. The Policy agent now treats two different figures for the same fact as a conflict under clause 5.2 before anything else. All 6 checks pass." });
-    if (j.review === "requested") out.push({ kind: "architect", text: "Review requested. The approver has it in their Inbox, with the checklist and evidence." });
-    if (j.review === "approved") out.push({ kind: "architect", text: "Approved. You can deploy." });
-    if (j.review === "changes") out.push({ kind: "architect", text: `The approver asked for changes: "${j.reviewNote}". I've pinned it above.` });
-    if (project.stage === "live") out.push({ kind: "architect", text: `Live at ${project.slug}.architect.app. Total spent: $${(RECEIPT.build + RECEIPT.tests).toFixed(2)}, inside the estimate.` });
     for (const m of j.chat) out.push({ kind: m.from === "user" ? "user" : "architect", text: m.text });
+    if (project.stage === "live") out.push({ kind: "architect", text: `Live at ${project.slug}.architect.app. Total spent: $${project.spendUsd.toFixed(2)}, inside the estimate.` });
     return out;
   }, [project, j, question]);
 
@@ -126,6 +123,8 @@ export default function WorkspacePage() {
   }
   if (!project || !loaded) return <div className="flex h-screen items-center justify-center text-sm text-ink-3">Opening project</div>;
 
+  const log = (text: string) => ({ from: "architect" as const, text, at: new Date().toISOString() });
+
   const say = (text: string) =>
     update((p) => ({
       chat: [
@@ -152,11 +151,11 @@ export default function WorkspacePage() {
           testsReady={testsReady}
           approvalRequired={org?.approvalRequired ?? false}
           onApprove={() => {
-            update({ review: "approved" });
+            update((p) => ({ review: "approved", chat: [...p.chat, log(`The approver approved version ${p.version}. You can deploy.`)] }));
             persist({ status: "preview" });
           }}
           onChanges={(note) => {
-            update({ review: "changes", reviewNote: note });
+            update((p) => ({ review: "changes", reviewNote: note, chat: [...p.chat, log(`The approver asked for a change to version ${p.version}: "${note}". It's pinned above; Ship has a button to make it.`)] }));
             persist({ status: "preview" });
           }}
         />
@@ -219,11 +218,20 @@ export default function WorkspacePage() {
             j={j}
             approvalRequired={org?.approvalRequired ?? false}
             onRequestReview={() => {
-              update({ review: "requested" });
+              update((p) => ({ review: "requested", chat: [...p.chat, log(`Review requested for version ${p.version}. The approver has it in their Inbox, with the checklist and evidence.`)] }));
               persist({ status: "in_review" });
             }}
             onDeploy={() => persist({ stage: "live", status: "live" })}
             onOpenApprover={() => setView("approver")}
+            onApplyChanges={() => {
+              const v = j.version + 1;
+              update((p) => ({
+                review: "none",
+                version: v,
+                chat: [...p.chat, log(`Version ${v} makes the approver's change: "${p.reviewNote}". I rebuilt only the parts it touches and re-ran all 6 checks; they pass. It cost $${CHANGE_COST.toFixed(2)}. Request review again when you're ready.`)],
+              }));
+              persist({ spendUsd: project.spendUsd + CHANGE_COST });
+            }}
           />
         );
     }

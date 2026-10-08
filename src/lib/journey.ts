@@ -13,6 +13,7 @@ export type Journey = {
   fixAttempts: number;
   review: "none" | "requested" | "approved" | "changes";
   reviewNote: string;
+  version: number; // goes up each time a change is made after review
   chat: { from: "user" | "architect"; text: string; at: string }[];
 };
 
@@ -26,6 +27,7 @@ const empty: Journey = {
   fixAttempts: 0,
   review: "none",
   reviewNote: "",
+  version: 1,
   chat: [],
 };
 

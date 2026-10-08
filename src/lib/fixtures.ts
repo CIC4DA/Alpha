@@ -287,4 +287,7 @@ export const TRACE = [
   },
 ];
 
+/** Cost of one scoped change after review: rebuild the affected parts and re-run the checks. */
+export const CHANGE_COST = 0.6;
+
 export const RECEIPT = { build: 4.2, tests: 0.3, fixes: 0 };
