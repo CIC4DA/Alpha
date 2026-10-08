@@ -200,3 +200,33 @@ export async function updateOrg(patch: Partial<Org>): Promise<void> {
   const { error } = await getSupabase()!.from("organisations").update(row).eq("id", o.id);
   if (error) throw new Error(error.message);
 }
+
+// ---------- Journey state: local in demo mode, on the project row otherwise ----------
+
+const JK = (id: string) => `alpha.journey.${id}`;
+
+export async function loadJourney(id: string): Promise<Record<string, unknown> | null> {
+  if (isDemo()) {
+    try {
+      const raw = localStorage.getItem(JK(id));
+      return raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+  const { data, error } = await getSupabase()!.from("projects").select("journey").eq("id", id).maybeSingle();
+  if (error) throw new Error(error.message);
+  const j = (data?.journey ?? null) as Record<string, unknown> | null;
+  return j && Object.keys(j).length ? j : null;
+}
+
+export async function saveJourney(id: string, journey: unknown): Promise<void> {
+  if (isDemo()) {
+    try {
+      localStorage.setItem(JK(id), JSON.stringify(journey));
+    } catch {}
+    return;
+  }
+  const { error } = await getSupabase()!.from("projects").update({ journey }).eq("id", id);
+  if (error) throw new Error(error.message);
+}

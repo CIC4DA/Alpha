@@ -37,6 +37,8 @@ create table if not exists public.projects (
   spend_usd numeric(10,2) not null default 0,
   tests_passed int not null default 0,
   tests_total int not null default 0,
+  -- Where the scripted journey is (answers, connections, test run, review state), shared by everyone on the project.
+  journey jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -112,3 +114,6 @@ begin
     insert into public.memberships (org_id, user_id, is_admin) values (new_org, u.id, true);
   end loop;
 end $$;
+
+-- For databases created before the journey column existed.
+alter table public.projects add column if not exists journey jsonb not null default '{}'::jsonb;

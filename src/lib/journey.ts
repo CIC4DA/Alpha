@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { loadJourney, saveJourney } from "./store";
 
 /** Per-project journey state for the scripted stages. The stage and status themselves live in the database. */
 export type Journey = {
@@ -31,31 +32,47 @@ const empty: Journey = {
   chat: [],
 };
 
-const key = (id: string) => `alpha.journey.${id}`;
-
+/**
+ * Journey state for one project. Saved after every change: to this browser in demo mode, to the project row
+ * otherwise, so a builder and an approver on different accounts see the same review state. Re-read when the
+ * tab regains focus, so the other person's changes show up without a reload.
+ */
 export function useJourney(projectId: string) {
   const [j, setJ] = useState<Journey>(empty);
   const [loaded, setLoaded] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef<Journey>(empty);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     try {
-      const raw = localStorage.getItem(key(projectId));
-      setJ(raw ? { ...empty, ...(JSON.parse(raw) as Journey) } : empty);
+      const stored = await loadJourney(projectId);
+      const next = stored ? ({ ...empty, ...stored } as Journey) : empty;
+      latest.current = next;
+      setJ(next);
     } catch {
-      setJ(empty);
+      setJ(latest.current);
     }
     setLoaded(true);
   }, [projectId]);
 
+  useEffect(() => {
+    load();
+    const onVisible = () => document.visibilityState === "visible" && !saveTimer.current && load();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [load]);
+
   const update = useCallback(
     (patch: Partial<Journey> | ((prev: Journey) => Partial<Journey>)) => {
-      setJ((prev) => {
-        const next = { ...prev, ...(typeof patch === "function" ? patch(prev) : patch) };
-        try {
-          localStorage.setItem(key(projectId), JSON.stringify(next));
-        } catch {}
-        return next;
-      });
+      const prev = latest.current;
+      const next = { ...prev, ...(typeof patch === "function" ? patch(prev) : patch) };
+      latest.current = next;
+      setJ(next);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null;
+        saveJourney(projectId, latest.current).catch(() => {});
+      }, 250);
     },
     [projectId],
   );
