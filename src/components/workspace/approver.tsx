@@ -22,7 +22,7 @@ export function ApproverCanvas({ j, testsReady, onApprove, onChanges, approvalRe
   }
 
   return (
-    <div className="mx-auto max-w-[760px] px-8 py-8 appear">
+    <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-8 sm:py-8 appear">
       <p className="text-[13px] text-ink-3">{j.review === "requested" ? "Review requested by the builder" : "Approver view"}</p>
       <h2 className="mt-1 text-2xl font-semibold tracking-tight">Loan Triage Desk, version {j.version}</h2>
       {!approvalRequired && (

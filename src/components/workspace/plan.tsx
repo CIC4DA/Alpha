@@ -42,7 +42,7 @@ export function PlanCanvas({
   const high = PLAN.estimate.high + extra * 1.5;
 
   return (
-    <div className="mx-auto max-w-[720px] px-8 py-8 appear">
+    <div className="mx-auto max-w-[720px] px-4 py-6 sm:px-8 sm:py-8 appear">
       <p className="text-[13px] text-ink-3">Plan, ready to approve</p>
       <h2 className="mt-1 font-serif text-[32px] leading-tight">{name}</h2>
       <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{PLAN.summary}</p>

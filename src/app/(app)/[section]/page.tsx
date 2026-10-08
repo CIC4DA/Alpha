@@ -40,7 +40,7 @@ export default async function SectionPage({ params }: { params: Promise<{ sectio
   const s = SECTIONS[section];
   if (!s) notFound();
   return (
-    <div className="mx-auto max-w-[760px] px-8 py-12">
+    <div className="mx-auto max-w-[760px] px-4 py-8 sm:px-8 sm:py-12">
       <h1 className="text-2xl font-semibold tracking-tight">{s.title}</h1>
       <p className="mt-1 text-ink-2">{s.lead}</p>
       <div className="mt-8 rounded-lg border border-line bg-surface p-5">

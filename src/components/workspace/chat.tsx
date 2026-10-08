@@ -111,7 +111,7 @@ export function ChatPane({
   };
 
   return (
-    <section className="flex h-full w-[380px] shrink-0 flex-col border-r border-line bg-paper" aria-label="Chat">
+    <section className="flex h-full w-full shrink-0 flex-col border-r border-line bg-paper lg:w-[380px]" aria-label="Chat">
       {/* Blockers stay pinned above the conversation until they're done. */}
       {todos.length > 0 && (
         <div className="m-3 mb-0 rounded-lg border border-amber/30 bg-amber-wash p-3">

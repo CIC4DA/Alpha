@@ -49,12 +49,12 @@ export default function HomePage() {
   const first = user?.name.split(" ")[0];
 
   return (
-    <div className="mx-auto max-w-[1040px] px-8 py-12">
-      <h1 className="font-serif text-[40px] leading-tight tracking-[-0.01em]">What should we build{first ? `, ${first}` : ""}?</h1>
+    <div className="mx-auto max-w-[1040px] px-4 py-8 sm:px-8 sm:py-12">
+      <h1 className="font-serif text-[30px] leading-tight sm:text-[40px] tracking-[-0.01em]">What should we build{first ? `, ${first}` : ""}?</h1>
       <p className="mt-2 text-ink-2">Describe the work you want automated. You&apos;ll see a plan and its price before anything is built.</p>
 
       <div className="mt-8 rounded-xl border border-line-strong bg-surface">
-        <div className="flex gap-1 border-b border-line px-3 pt-2" role="tablist">
+        <div className="flex gap-1 overflow-x-auto border-b border-line px-3 pt-2" role="tablist">
           {(
             [
               ["describe", "Describe it", PenLine],
@@ -67,7 +67,7 @@ export default function HomePage() {
               role="tab"
               aria-selected={mode === id}
               onClick={() => setMode(id)}
-              className={`-mb-px flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm ${mode === id ? "border-blue font-medium text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
+              className={`-mb-px flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm ${mode === id ? "border-blue font-medium text-ink" : "border-transparent text-ink-3 hover:text-ink"}`}
             >
               <Icon size={15} /> {label}
             </button>

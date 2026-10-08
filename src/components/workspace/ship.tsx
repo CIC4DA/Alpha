@@ -57,7 +57,7 @@ export function ShipCanvas({
   if (project.stage === "live") return <LiveCanvas project={project} version={j.version} />;
 
   return (
-    <div className="mx-auto max-w-[760px] px-8 py-8 appear">
+    <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-8 sm:py-8 appear">
       <p className="text-[13px] text-ink-3">{approvalRequired ? "Your organisation requires a separate approver" : "No separate approver required in your organisation"}</p>
       <h2 className="mt-1 text-2xl font-semibold tracking-tight">{approvalRequired ? "Get it approved, then ship" : "Check it, then ship"}</h2>
       <p className="mt-2 text-[15px] leading-relaxed text-ink-2">
@@ -160,7 +160,7 @@ function LiveCanvas({ project, version }: { project: Project; version: number })
   const changes = (version - 1) * CHANGE_COST;
   const actual = RECEIPT.build + RECEIPT.tests + RECEIPT.fixes + changes;
   return (
-    <div className="mx-auto max-w-[760px] px-8 py-8 appear">
+    <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-8 sm:py-8 appear">
       <p className="text-[13px] text-green">Live</p>
       <h2 className="mt-1 font-serif text-[32px] leading-tight">{project.name} is live</h2>
       <Link href={`/live/${project.slug}`} target="_blank" className="mt-2 inline-flex items-center gap-1.5 text-blue hover:underline">

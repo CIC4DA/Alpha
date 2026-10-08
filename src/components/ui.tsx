@@ -3,7 +3,7 @@ import type { Status } from "@/lib/store";
 
 type BtnProps = React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "quiet" | "ghost" | "danger"; size?: "sm" | "md" };
 
-const base = "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors disabled:opacity-45 disabled:cursor-not-allowed";
+const base = "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors disabled:opacity-45 disabled:cursor-not-allowed";
 const variants = {
   primary: "bg-blue text-white hover:bg-blue-ink",
   quiet: "bg-surface text-ink border border-line-strong hover:border-ink-3",

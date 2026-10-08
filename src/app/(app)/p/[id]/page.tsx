@@ -6,7 +6,7 @@ import Link from "next/link";
 import { getOrg, getProject, updateProject, type Org, type Project, type Stage } from "@/lib/store";
 import { useJourney } from "@/lib/journey";
 import { BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
-import { TopBar, stageIndex, type View } from "@/components/workspace/topbar";
+import { TopBar, STAGES, stageIndex, type View } from "@/components/workspace/topbar";
 import { ChatPane, type ChatItem, type Todo } from "@/components/workspace/chat";
 import { PlanCanvas } from "@/components/workspace/plan";
 import { ConnectCanvas } from "@/components/workspace/connect";
@@ -31,6 +31,7 @@ export default function WorkspacePage() {
   const [view, setView] = useState<View>("builder");
   const [devTab, setDevTab] = useState<DevTab>("files");
   const [devFile, setDevFile] = useState<string | undefined>();
+  const [pane, setPane] = useState<"chat" | "canvas">("chat"); // narrow screens show one at a time
 
   useEffect(() => {
     getProject(id)
@@ -40,7 +41,9 @@ export default function WorkspacePage() {
         setViewing(p.stage);
       })
       .catch((e) => setError(e.message));
-    getOrg().then(setOrg).catch(() => {});
+    getOrg()
+      .then(setOrg)
+      .catch(() => {});
     const v = new URLSearchParams(window.location.search).get("view");
     if (v === "approver" || v === "developer") setView(v);
   }, [id]);
@@ -57,6 +60,7 @@ export default function WorkspacePage() {
     if (project && stageIndex(s) > stageIndex(project.stage)) persist({ stage: s });
     setViewing(s);
     setView("builder");
+    setPane("canvas");
   };
 
   // The build runs step by step and survives leaving the page: progress is saved after every step.
@@ -79,19 +83,30 @@ export default function WorkspacePage() {
     const out: ChatItem[] = [{ kind: "user", text: project.prompt }];
     out.push({ kind: "architect", text: `I've called this project "${project.name}". A few questions first, only about what your prompt leaves open.` });
     for (const q of QUESTIONS) if (j.answers[q.id]) out.push({ kind: "user", text: `${q.ask}\n${label(q.id, j.answers[q.id])}` });
-    if (!question) out.push({ kind: "architect", text: "The plan is on the right. Anything I added beyond your prompt is marked Suggested and switched off. You'll see the price before anything is built." });
+    if (!question)
+      out.push({ kind: "architect", text: "The plan is on the right. Anything I added beyond your prompt is marked Suggested and switched off. You'll see the price before anything is built." });
     const s = stageIndex(project.stage);
     if (s >= 1) out.push({ kind: "architect", text: "Plan approved. Before building, connect the lending policy and Gmail, so the first preview runs on your data and your tests use your cases." });
     if (s >= 2) {
-      out.push({ kind: "architect", text: j.demoData ? "Building with demo data. The preview will say so, and production stays locked until real data is connected." : "Building now. You can watch the preview fill in, or leave: the build carries on." });
+      out.push({
+        kind: "architect",
+        text: j.demoData
+          ? "Building with demo data. The preview will say so, and production stays locked until real data is connected."
+          : "Building now. You can watch the preview fill in, or leave: the build carries on.",
+      });
       BUILD_STEPS.forEach((b, i) => out.push({ kind: "step", text: b.label, state: i < j.buildDone ? "done" : i === j.buildDone ? "running" : "waiting" }));
     }
-    if (j.buildDone >= BUILD_STEPS.length) out.push({ kind: "architect", text: "Built, and every screen checked end to end. One type error in the review screen was fixed on the first try, at no cost. Next: test it on your sample applications." });
+    if (j.buildDone >= BUILD_STEPS.length)
+      out.push({
+        kind: "architect",
+        text: "Built, and every screen checked end to end. One type error in the review screen was fixed on the first try, at no cost. Next: test it on your sample applications.",
+      });
     if (j.testRun !== "none") {
       const bw = GOLDEN.find((g) => g.id === "brightwell")!;
       out.push({ kind: "architect", text: `5 of 6 checks pass. ${bw.firstRun.note} Fixing it is free.` });
     }
-    if (j.testRun === "fixed") out.push({ kind: "architect", text: "Fixed. The Policy agent now treats two different figures for the same fact as a conflict under clause 5.2 before anything else. All 6 checks pass." });
+    if (j.testRun === "fixed")
+      out.push({ kind: "architect", text: "Fixed. The Policy agent now treats two different figures for the same fact as a conflict under clause 5.2 before anything else. All 6 checks pass." });
     for (const m of j.chat) out.push({ kind: m.from === "user" ? "user" : "architect", text: m.text });
     if (project.stage === "live") out.push({ kind: "architect", text: `Live at ${project.slug}.architect.app. Total spent: $${project.spendUsd.toFixed(2)}, inside the estimate.` });
     return out;
@@ -142,8 +157,7 @@ export default function WorkspacePage() {
     }));
 
   const canvas = () => {
-    if (view === "developer")
-      return <DeveloperCanvas tab={devTab} onTab={setDevTab} buildDone={j.buildDone} initialFile={devFile} />;
+    if (view === "developer") return <DeveloperCanvas tab={devTab} onTab={setDevTab} buildDone={j.buildDone} initialFile={devFile} />;
     if (view === "approver")
       return (
         <ApproverCanvas
@@ -155,7 +169,11 @@ export default function WorkspacePage() {
             persist({ status: "preview" });
           }}
           onChanges={(note) => {
-            update((p) => ({ review: "changes", reviewNote: note, chat: [...p.chat, log(`The approver asked for a change to version ${p.version}: "${note}". It's pinned above; Ship has a button to make it.`)] }));
+            update((p) => ({
+              review: "changes",
+              reviewNote: note,
+              chat: [...p.chat, log(`The approver asked for a change to version ${p.version}: "${note}". It's pinned above; Ship has a button to make it.`)],
+            }));
             persist({ status: "preview" });
           }}
         />
@@ -228,7 +246,12 @@ export default function WorkspacePage() {
               update((p) => ({
                 review: "none",
                 version: v,
-                chat: [...p.chat, log(`Version ${v} makes the approver's change: "${p.reviewNote}". I rebuilt only the parts it touches and re-ran all 6 checks; they pass. It cost $${CHANGE_COST.toFixed(2)}. Request review again when you're ready.`)],
+                chat: [
+                  ...p.chat,
+                  log(
+                    `Version ${v} makes the approver's change: "${p.reviewNote}". I rebuilt only the parts it touches and re-ran all 6 checks; they pass. It cost $${CHANGE_COST.toFixed(2)}. Request review again when you're ready.`,
+                  ),
+                ],
               }));
               persist({ spendUsd: project.spendUsd + CHANGE_COST });
             }}
@@ -239,34 +262,57 @@ export default function WorkspacePage() {
 
   return (
     <div className="flex h-screen flex-col">
-      <TopBar
-        project={project}
-        viewing={viewing}
-        onViewStage={goStage}
-        view={view}
-        onView={setView}
-        shipReady={testsReady}
-        onShip={() => goStage(project.stage === "live" ? "live" : "ship")}
-      />
+      <TopBar project={project} viewing={viewing} onViewStage={goStage} view={view} onView={setView} shipReady={testsReady} onShip={() => goStage(project.stage === "live" ? "live" : "ship")} />
+      <div className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-2 lg:hidden">
+        <label className="sr-only" htmlFor="stage-pick">
+          Stage
+        </label>
+        <select
+          id="stage-pick"
+          value={viewing === "live" ? "ship" : viewing}
+          onChange={(e) => goStage(e.target.value as Stage)}
+          className="h-8 rounded-md border border-line-strong bg-surface px-2 text-[13px] md:hidden"
+        >
+          {STAGES.map((s, i) => (
+            <option key={s.id} value={s.id} disabled={i > stageIndex(project.stage)}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <div className="ml-auto flex rounded-full border border-line-strong p-0.5 text-[12px]" role="group" aria-label="Show">
+          {(["chat", "canvas"] as const).map((p) => (
+            <button key={p} onClick={() => setPane(p)} aria-pressed={pane === p} className={`rounded-full px-3 py-1 ${pane === p ? "bg-blue-wash font-medium text-blue-ink" : "text-ink-2"}`}>
+              {p === "chat" ? "Chat" : view === "builder" ? "Plan and app" : view === "developer" ? "Code" : "Review"}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="flex min-h-0 flex-1">
-        <ChatPane
-          items={items}
-          todos={todos}
-          question={stageIndex(project.stage) === 0 ? question : undefined}
-          qIndex={Math.max(qIndex, 0)}
-          qTotal={QUESTIONS.length}
-          onAnswer={(v) => question && update((p) => ({ answers: { ...p.answers, [question.id]: v } }))}
-          onAllRecommended={() =>
-            update((p) => {
-              const answers = { ...p.answers };
-              for (const q of QUESTIONS) if (!answers[q.id]) answers[q.id] = q.options.filter((o) => o.recommended).map((o) => o.id);
-              return { answers };
-            })
-          }
-          onSend={say}
-          placeholder={view === "developer" ? "Ask about the code, or ask for a change" : view === "approver" ? "Comment for the builder" : "Ask for a change, or ask a question"}
-        />
-        <section className="min-w-0 flex-1 overflow-y-auto bg-paper">{canvas()}</section>
+        <div className={`${pane === "canvas" ? "hidden" : "flex"} w-full min-w-0 lg:flex lg:w-auto`}>
+          <ChatPane
+            items={items}
+            todos={todos}
+            question={stageIndex(project.stage) === 0 ? question : undefined}
+            qIndex={Math.max(qIndex, 0)}
+            qTotal={QUESTIONS.length}
+            onAnswer={(v) => {
+              if (!question) return;
+              update((p) => ({ answers: { ...p.answers, [question.id]: v } }));
+              if (qIndex === QUESTIONS.length - 1) setPane("canvas");
+            }}
+            onAllRecommended={() => {
+              update((p) => {
+                const answers = { ...p.answers };
+                for (const q of QUESTIONS) if (!answers[q.id]) answers[q.id] = q.options.filter((o) => o.recommended).map((o) => o.id);
+                return { answers };
+              });
+              setPane("canvas");
+            }}
+            onSend={say}
+            placeholder={view === "developer" ? "Ask about the code, or ask for a change" : view === "approver" ? "Comment for the builder" : "Ask for a change, or ask a question"}
+          />
+        </div>
+        <section className={`${pane === "chat" ? "hidden" : "block"} min-w-0 flex-1 overflow-y-auto bg-paper lg:block`}>{canvas()}</section>
       </div>
     </div>
   );

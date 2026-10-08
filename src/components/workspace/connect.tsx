@@ -71,7 +71,7 @@ export function ConnectCanvas({
   const canStart = requiredDone || j.demoData;
 
   return (
-    <div className="mx-auto max-w-[720px] px-8 py-8 appear">
+    <div className="mx-auto max-w-[720px] px-4 py-6 sm:px-8 sm:py-8 appear">
       <p className="text-[13px] text-ink-3">Before anything is built</p>
       <h2 className="mt-1 text-2xl font-semibold tracking-tight">Connect what the app needs</h2>
       <p className="mt-2 text-[15px] leading-relaxed text-ink-2">

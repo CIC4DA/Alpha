@@ -36,7 +36,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[760px] px-8 py-12">
+    <div className="mx-auto max-w-[760px] px-4 py-8 sm:px-8 sm:py-12">
       <h1 className="text-2xl font-semibold tracking-tight">Organisation settings</h1>
       <p className="mt-1 text-sm text-ink-2">{org?.name ?? "Loading"}</p>
       {error && <p className="mt-4 text-sm text-red">{error}</p>}

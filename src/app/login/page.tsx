@@ -74,7 +74,7 @@ export default function LoginPage() {
         </div>
 
         <div className="max-w-[34rem]">
-          <h1 className="font-serif text-[52px] leading-[1.05] tracking-[-0.01em] text-ink">
+          <h1 className="font-serif text-[38px] leading-[1.05] sm:text-[52px] tracking-[-0.01em] text-ink">
             Prototype to production in one project.
           </h1>
           <p className="mt-5 max-w-[30rem] text-[17px] leading-relaxed text-ink-2">

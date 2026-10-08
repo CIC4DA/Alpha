@@ -44,7 +44,7 @@ export function TopBar({
       </div>
 
       {/* The stepper: reached stages can be reopened; later ones are locked until earlier ones finish. */}
-      <nav aria-label="Stages" className="mx-auto flex items-center">
+      <nav aria-label="Stages" className="mx-auto hidden items-center md:flex">
         {STAGES.map((s, i) => {
           const done = reached > i;
           const current = viewing === s.id || (viewing === "live" && s.id === "ship");
@@ -68,8 +68,8 @@ export function TopBar({
         })}
       </nav>
 
-      <div className="flex items-center gap-2">
-        <div className="flex rounded-full border border-line-strong p-0.5 text-[12px]" role="group" aria-label="View">
+      <div className="ml-auto flex items-center gap-2 md:ml-0">
+        <div className="hidden rounded-full border border-line-strong p-0.5 text-[12px] sm:flex" role="group" aria-label="View">
           {(["builder", "developer", "approver"] as View[]).map((v) => (
             <button
               key={v}
@@ -89,7 +89,7 @@ export function TopBar({
           }}
           className="flex h-8 items-center gap-1.5 rounded-md border border-line-strong px-2.5 text-[13px] hover:border-ink-3"
         >
-          <Share2 size={14} /> {copied ? "Link copied" : "Share"}
+          <Share2 size={14} /> <span className="hidden sm:inline">{copied ? "Link copied" : "Share"}</span>
         </button>
         <button
           onClick={onShip}

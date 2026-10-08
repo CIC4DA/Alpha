@@ -43,7 +43,7 @@ export default function ImportPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[760px] px-8 py-12">
+    <div className="mx-auto max-w-[760px] px-4 py-8 sm:px-8 sm:py-12">
       <h1 className="text-2xl font-semibold tracking-tight">Import from GitHub</h1>
       <p className="mt-1 text-sm text-ink-2">Bring an existing app into Architect and keep working on it, in chat or in code.</p>
 

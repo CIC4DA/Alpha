@@ -34,7 +34,8 @@ export function Rail({ collapsedByDefault = false }: { collapsedByDefault?: bool
   const [recent, setRecent] = useState<Project[]>([]);
   const [collapsed, setCollapsed] = useState(collapsedByDefault);
 
-  useEffect(() => setCollapsed(collapsedByDefault), [collapsedByDefault]);
+  // Collapsed inside a project, and always on narrow screens, where the full rail would take half the width.
+  useEffect(() => setCollapsed(collapsedByDefault || window.matchMedia("(max-width: 767px)").matches), [collapsedByDefault]);
 
   useEffect(() => {
     let alive = true;
