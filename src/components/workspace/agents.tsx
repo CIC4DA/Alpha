@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Bot, UserCheck, Upload, Send, X, FlaskConical } from "lucide-react";
 import { Button } from "../ui";
 
-type AgentId = "extraction" | "policy" | "drafting";
+export type AgentId = "extraction" | "policy" | "drafting";
 
-const AGENTS: Record<AgentId, { name: string; role: string; rules: string[]; tools: string[]; knowledge: string[] }> = {
+export const AGENTS: Record<AgentId, { name: string; role: string; rules: string[]; tools: string[]; knowledge: string[] }> = {
   extraction: {
     name: "Extraction agent",
     role: "Reads the application PDF and returns applicant name, amount, income and purpose, each with its page and quoted source.",
@@ -30,7 +30,7 @@ const AGENTS: Record<AgentId, { name: string; role: string; rules: string[]; too
   },
 };
 
-const MODELS = ["Recommended for this agent", "Claude", "GPT", "Gemini", "Llama, self-hosted"];
+export const MODELS = ["Recommended for this agent", "Claude", "GPT", "Gemini", "Llama, self-hosted"];
 const FRAMEWORKS = ["Lyzr (default)", "GitAgent repo", "LangGraph", "CrewAI", "OpenAI Agents SDK"];
 
 function Node({ icon: Icon, title, sub, human, onClick, active }: { icon: typeof Bot; title: string; sub: string; human?: boolean; onClick?: () => void; active?: boolean }) {
@@ -48,8 +48,8 @@ function Node({ icon: Icon, title, sub, human, onClick, active }: { icon: typeof
 
 const Arrow = () => <span className="h-px w-4 shrink-0 bg-ink-3" aria-hidden="true" />;
 
-export function AgentsCanvas() {
-  const [open, setOpen] = useState<AgentId | null>(null);
+export function AgentsCanvas({ initialOpen = null }: { initialOpen?: AgentId | null }) {
+  const [open, setOpen] = useState<AgentId | null>(initialOpen);
   const [model, setModel] = useState<Record<AgentId, string>>({ extraction: MODELS[0], policy: MODELS[0], drafting: MODELS[0] });
   const [framework, setFramework] = useState<Record<AgentId, string>>({ extraction: FRAMEWORKS[0], policy: FRAMEWORKS[0], drafting: FRAMEWORKS[0] });
   const [compare, setCompare] = useState<"idle" | "running" | "done">("idle");

@@ -117,3 +117,113 @@ end $$;
 
 -- For databases created before the journey column existed.
 alter table public.projects add column if not exists journey jsonb not null default '{}'::jsonb;
+
+-- Workspaces ------------------------------------------------------------------
+-- An organisation is a workspace. An FDE keeps their own and one per customer; each has its own
+-- members, approval rule and deploy target, and nothing is shared across them.
+alter table public.organisations add column if not exists kind text not null default 'own' check (kind in ('own','customer'));
+alter table public.organisations add column if not exists deploy_target text not null default 'architect' check (deploy_target in ('architect','customer_cloud'));
+alter table public.organisations add column if not exists cloud_account text not null default '';
+
+create or replace function public.create_workspace(p_name text, p_kind text default 'customer')
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  new_org uuid;
+begin
+  if auth.uid() is null then raise exception 'Sign in first'; end if;
+  insert into public.organisations (name, kind, approval_required)
+    values (p_name, p_kind, p_kind = 'customer') returning id into new_org;
+  insert into public.memberships (org_id, user_id, is_admin) values (new_org, auth.uid(), true);
+  return new_org;
+end;
+$$;
+grant execute on function public.create_workspace(text, text) to authenticated;
+
+-- Invitations -----------------------------------------------------------------
+-- Pending until someone signs in with that email; then they become a member with the role's permissions.
+create table if not exists public.invitations (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.organisations(id) on delete cascade,
+  email text not null,
+  role text not null check (role in ('admin','builder','developer','approver')),
+  status text not null default 'pending' check (status in ('pending','accepted')),
+  invited_by uuid not null default auth.uid() references auth.users(id),
+  created_at timestamptz not null default now(),
+  unique (org_id, email)
+);
+alter table public.invitations enable row level security;
+
+drop policy if exists "members read invitations" on public.invitations;
+create policy "members read invitations" on public.invitations
+  for select using (public.is_member(org_id));
+
+drop policy if exists "admins invite" on public.invitations;
+create policy "admins invite" on public.invitations
+  for insert with check (exists (select 1 from public.memberships m where m.org_id = invitations.org_id and m.user_id = auth.uid() and m.is_admin));
+
+create or replace function public.role_permissions(p_role text)
+returns text[] language sql immutable as $$
+  select case p_role
+    when 'builder' then array['build']
+    when 'developer' then array['build','edit_code']
+    when 'approver' then array['approve','deploy']
+    else array['build','edit_code','approve','deploy']
+  end;
+$$;
+
+create or replace function public.accept_invitations_for(p_user uuid, p_email text)
+returns int language plpgsql security definer set search_path = public as $$
+declare
+  inv record;
+  n int := 0;
+begin
+  for inv in select * from public.invitations where lower(email) = lower(p_email) and status = 'pending' loop
+    insert into public.memberships (org_id, user_id, is_admin, permissions)
+      values (inv.org_id, p_user, inv.role = 'admin', public.role_permissions(inv.role))
+      on conflict (org_id, user_id) do nothing;
+    update public.invitations set status = 'accepted' where id = inv.id;
+    n := n + 1;
+  end loop;
+  return n;
+end;
+$$;
+
+-- Called by the app after sign-in, for people who already had an account when they were invited.
+create or replace function public.accept_invitations()
+returns int language sql security definer set search_path = public as $$
+  select public.accept_invitations_for(auth.uid(), (select email from auth.users where id = auth.uid()));
+$$;
+grant execute on function public.accept_invitations() to authenticated;
+
+-- New users: their own workspace, plus any workspaces they were invited to.
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  new_org uuid;
+  display text := coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1));
+begin
+  insert into public.organisations (name) values (display || '''s workspace') returning id into new_org;
+  insert into public.memberships (org_id, user_id, is_admin) values (new_org, new.id, true);
+  perform public.accept_invitations_for(new.id, new.email);
+  return new;
+end;
+$$;
+
+-- Blueprints ------------------------------------------------------------------
+-- A delivered app saved for reuse: its plan answers and prompt, never the customer's files or data.
+create table if not exists public.blueprints (
+  id uuid primary key default gen_random_uuid(),
+  owner uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  prompt text not null,
+  answers jsonb not null default '{}'::jsonb,
+  suggested_on text[] not null default '{}',
+  source text not null default '',
+  created_at timestamptz not null default now()
+);
+alter table public.blueprints enable row level security;
+
+drop policy if exists "owners use their blueprints" on public.blueprints;
+create policy "owners use their blueprints" on public.blueprints
+  for all using (owner = auth.uid()) with check (owner = auth.uid());

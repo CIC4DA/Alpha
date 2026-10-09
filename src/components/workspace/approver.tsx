@@ -6,7 +6,7 @@ import { GOLDEN, RULE_CHECKS } from "@/lib/fixtures";
 import type { Journey } from "@/lib/journey";
 import { Button } from "../ui";
 
-export function ApproverCanvas({ j, testsReady, onApprove, onChanges, approvalRequired }: { j: Journey; testsReady: boolean; onApprove: () => void; onChanges: (note: string) => void; approvalRequired: boolean }) {
+export function ApproverCanvas({ j, testsReady, onApprove, onChanges, approvalRequired, selfReview = false }: { j: Journey; testsReady: boolean; onApprove: () => void; onChanges: (note: string) => void; approvalRequired: boolean; selfReview?: boolean }) {
   const [note, setNote] = useState("");
   const [asking, setAsking] = useState(false);
 
@@ -126,10 +126,13 @@ export function ApproverCanvas({ j, testsReady, onApprove, onChanges, approvalRe
             <Button onClick={() => setAsking(true)} disabled={j.review !== "requested"}>
               Request changes
             </Button>
-            <Button variant="primary" onClick={onApprove} disabled={j.review !== "requested"}>
+            <Button variant="primary" onClick={onApprove} disabled={j.review !== "requested" || selfReview}>
               Approve version {j.version}
             </Button>
           </div>
+        )}
+        {selfReview && j.review === "requested" && (
+          <p className="mt-2 text-right text-[12px] text-ink-3">You requested this review, and this workspace requires a different person to approve it.</p>
         )}
         {j.review === "none" && approvalRequired && <p className="mt-2 text-right text-[12px] text-ink-3">The builder hasn&apos;t requested review yet.</p>}
       </div>

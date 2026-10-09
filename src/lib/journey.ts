@@ -15,6 +15,10 @@ export type Journey = {
   review: "none" | "requested" | "approved" | "changes";
   reviewNote: string;
   version: number; // goes up each time a change is made after review
+  fromBlueprint?: string; // "Loan Triage Desk, built for Kestrel Lending"
+  handover?: { emails: string[]; at: string };
+  blueprintSaved?: boolean;
+  reviewRequestedBy?: string; // user id; with a separate approver required, this person can't approve
   chat: { from: "user" | "architect"; text: string; at: string }[];
 };
 

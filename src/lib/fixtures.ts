@@ -290,4 +290,14 @@ export const TRACE = [
 /** Cost of one scoped change after review: rebuild the affected parts and re-run the checks. */
 export const CHANGE_COST = 0.6;
 
+/** Build step after which each agent exists (agents are created in build steps 4 to 6). */
+export const AGENT_READY_AT = { extraction: 4, policy: 5, drafting: 6 } as const;
+
+/** Sample production figures for a live loan-triage app, last 7 days. */
+export const AGENT_MONITOR = {
+  extraction: { runs: 142, cost: 1.85, failures: 1, latency: "6.1 s", note: "One scanned PDF had no text layer. It went to Manual Review with a note for the officer." },
+  policy: { runs: 139, cost: 2.36, failures: 0, latency: "3.4 s", note: "" },
+  drafting: { runs: 97, cost: 0.58, failures: 0, latency: "2.2 s", note: "" },
+} as const;
+
 export const RECEIPT = { build: 4.2, tests: 0.3, fixes: 0 };

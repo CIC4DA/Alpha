@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getOrg, getProject, updateProject, type Org, type Project, type Stage } from "@/lib/store";
+import { getOrg, getProject, invite, isDemo, saveBlueprint, updateProject, type Org, type Project, type Stage } from "@/lib/store";
+import { useAuth } from "@/lib/auth";
 import { useJourney } from "@/lib/journey";
 import { BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
 import { TopBar, STAGES, stageIndex, type View } from "@/components/workspace/topbar";
@@ -11,8 +12,9 @@ import { ChatPane, type ChatItem, type Todo } from "@/components/workspace/chat"
 import { PlanCanvas } from "@/components/workspace/plan";
 import { ConnectCanvas } from "@/components/workspace/connect";
 import { BuildCanvas } from "@/components/workspace/build";
+import type { AgentId } from "@/components/workspace/agents";
 import { TestCanvas, testCounts } from "@/components/workspace/test";
-import { ShipCanvas } from "@/components/workspace/ship";
+import { ShipCanvas, liveHost } from "@/components/workspace/ship";
 import { DeveloperCanvas, type DevTab } from "@/components/workspace/developer";
 import { ApproverCanvas } from "@/components/workspace/approver";
 
@@ -21,8 +23,40 @@ const label = (qid: string, ids: string[]) => {
   return ids.map((id) => q.options.find((o) => o.id === id)?.label ?? id).join("; ");
 };
 
+/** Written from the project itself at handover, so it can't drift from what was built. */
+function handoverDoc(project: Project, org: Org | null, version: number) {
+  return `# ${project.name}: handover
+
+${project.description}
+
+## Where it runs
+${org?.deployTarget === "customer_cloud" ? `${org.name}'s ${org.cloudAccount}, isolated VPC` : "Architect cloud"}
+Live version: v${version}. Every earlier version can be rolled back in one click.
+
+## Agents
+- Extraction agent: reads the PDF; returns name, amount, income, purpose, each with page and quote
+- Policy agent: checks confirmed facts against the lending policy; Approve, Decline or Manual Review, citing clauses
+- Drafting agent: writes the email; an officer confirms every send
+
+## Rules the agents follow (each is a test)
+- Cite a policy clause for every recommendation
+- Send missing or conflicting facts to Manual Review
+- Officer confirms extracted facts before the policy check
+- Never use age, marital status or other protected characteristics
+
+## Making changes
+Ask for the change in chat as the builder. Architect makes a new version, runs the golden tests in
+tests/golden/ and sends it to the approver. Live keeps running until the new version is approved and deployed.
+
+## Golden tests
+3 cases from real applications, checked on outcome and on the clauses cited. Add a case whenever an
+officer overrides a recommendation: the override becomes the expected answer.
+`;
+}
+
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
   const [org, setOrg] = useState<Org | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,13 +66,19 @@ export default function WorkspacePage() {
   const [devTab, setDevTab] = useState<DevTab>("files");
   const [devFile, setDevFile] = useState<string | undefined>();
   const [pane, setPane] = useState<"chat" | "canvas">("chat"); // narrow screens show one at a time
+  const [openAgent, setOpenAgent] = useState<AgentId | null>(null); // from the Agents page
 
   useEffect(() => {
     getProject(id)
       .then((p) => {
         if (!p) return setError("This project doesn't exist, or you don't have access to it.");
         setProject(p);
-        setViewing(p.stage);
+        const agent = new URLSearchParams(window.location.search).get("agent") as AgentId | null;
+        if (agent && stageIndex(p.stage) >= stageIndex("build")) {
+          setOpenAgent(agent);
+          setViewing("build");
+          setPane("canvas");
+        } else setViewing(p.stage);
       })
       .catch((e) => setError(e.message));
     getOrg()
@@ -81,7 +121,12 @@ export default function WorkspacePage() {
   const items: ChatItem[] = useMemo(() => {
     if (!project) return [];
     const out: ChatItem[] = [{ kind: "user", text: project.prompt }];
-    out.push({ kind: "architect", text: `I've called this project "${project.name}". A few questions first, only about what your prompt leaves open.` });
+    out.push({
+      kind: "architect",
+      text: j.fromBlueprint
+        ? `Started from your blueprint: ${j.fromBlueprint}. The plan's answers, agents and golden tests come with it. That customer's files, accounts and data don't, so Connect starts empty for ${org?.name ?? "this workspace"}.`
+        : `I've called this project "${project.name}". A few questions first, only about what your prompt leaves open.`,
+    });
     for (const q of QUESTIONS) if (j.answers[q.id]) out.push({ kind: "user", text: `${q.ask}\n${label(q.id, j.answers[q.id])}` });
     if (!question)
       out.push({ kind: "architect", text: "The plan is on the right. Anything I added beyond your prompt is marked Suggested and switched off. You'll see the price before anything is built." });
@@ -108,9 +153,9 @@ export default function WorkspacePage() {
     if (j.testRun === "fixed")
       out.push({ kind: "architect", text: "Fixed. The Policy agent now treats two different figures for the same fact as a conflict under clause 5.2 before anything else. All 6 checks pass." });
     for (const m of j.chat) out.push({ kind: m.from === "user" ? "user" : "architect", text: m.text });
-    if (project.stage === "live") out.push({ kind: "architect", text: `Live at ${project.slug}.architect.app. Total spent: $${project.spendUsd.toFixed(2)}, inside the estimate.` });
+    if (project.stage === "live") out.push({ kind: "architect", text: `Live at ${liveHost(project, org)}. Total spent: $${project.spendUsd.toFixed(2)}, inside the estimate.` });
     return out;
-  }, [project, j, question]);
+  }, [project, j, question, org]);
 
   const todos: Todo[] = useMemo(() => {
     if (!project) return [];
@@ -157,13 +202,15 @@ export default function WorkspacePage() {
     }));
 
   const canvas = () => {
-    if (view === "developer") return <DeveloperCanvas tab={devTab} onTab={setDevTab} buildDone={j.buildDone} initialFile={devFile} />;
+    if (view === "developer")
+      return <DeveloperCanvas tab={devTab} onTab={setDevTab} buildDone={j.buildDone} initialFile={devFile} extraFiles={j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : []} />;
     if (view === "approver")
       return (
         <ApproverCanvas
           j={j}
           testsReady={testsReady}
           approvalRequired={org?.approvalRequired ?? false}
+          selfReview={Boolean(org?.approvalRequired && !isDemo() && j.reviewRequestedBy && j.reviewRequestedBy === user?.id)}
           onApprove={() => {
             update((p) => ({ review: "approved", chat: [...p.chat, log(`The approver approved version ${p.version}. You can deploy.`)] }));
             persist({ status: "preview" });
@@ -206,7 +253,7 @@ export default function WorkspacePage() {
           />
         );
       case "build":
-        return <BuildCanvas done={j.buildDone} demo={j.demoData} onNext={() => goStage("test")} />;
+        return <BuildCanvas done={j.buildDone} demo={j.demoData} onNext={() => goStage("test")} openAgent={openAgent} />;
       case "test":
         return (
           <TestCanvas
@@ -234,9 +281,29 @@ export default function WorkspacePage() {
           <ShipCanvas
             project={project}
             j={j}
+            org={org}
             approvalRequired={org?.approvalRequired ?? false}
+            onHandover={async ({ builder, approver }) => {
+              await invite(builder, "builder");
+              await invite(approver, "approver");
+              update((p) => ({
+                handover: { emails: [builder, approver], at: new Date().toISOString() },
+                chat: [...p.chat, log(`Handed over to ${org?.name}: ${builder} as builder, ${approver} as approver. I wrote HANDOVER.md from the project; it's in the Developer view.`)],
+              }));
+            }}
+            onSaveBlueprint={async () => {
+              await saveBlueprint({
+                name: project.name,
+                description: project.description,
+                prompt: project.prompt,
+                answers: j.answers,
+                suggestedOn: j.suggestedOn,
+                source: `${project.name}, built for ${org?.name ?? "your workspace"}`,
+              });
+              update({ blueprintSaved: true });
+            }}
             onRequestReview={() => {
-              update((p) => ({ review: "requested", chat: [...p.chat, log(`Review requested for version ${p.version}. The approver has it in their Inbox, with the checklist and evidence.`)] }));
+              update((p) => ({ review: "requested", reviewRequestedBy: user?.id, chat: [...p.chat, log(`Review requested for version ${p.version}. The approver has it in their Inbox, with the checklist and evidence.`)] }));
               persist({ status: "in_review" });
             }}
             onDeploy={() => persist({ stage: "live", status: "live" })}

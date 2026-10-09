@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Check, Loader2, ShieldCheck, ExternalLink, RotateCcw, AlertTriangle } from "lucide-react";
+import { Check, Loader2, ShieldCheck, ExternalLink, RotateCcw, AlertTriangle, Layers, Handshake } from "lucide-react";
 import { RULE_CHECKS, RECEIPT, PLAN, CHANGE_COST } from "@/lib/fixtures";
 import type { Journey } from "@/lib/journey";
-import type { Project } from "@/lib/store";
+import type { Org, Project } from "@/lib/store";
 import { Button, money } from "../ui";
 
 const CHECKS = [
@@ -15,29 +15,47 @@ const CHECKS = [
   { label: "Who can reach it", evidence: "Invited loan officers only" },
 ];
 
-const DEPLOY_STEPS = ["Production build", "Staging tests, all passing", "Database migrations", "Agents and policy pinned to tested versions", "Traffic switched, health checks passing"];
+const deploySteps = (org: Org | null) => [
+  "Production build",
+  "Staging tests, all passing",
+  org?.deployTarget === "customer_cloud" ? `Deploying into ${org.name}'s VPC` : "Database migrations",
+  "Agents and policy pinned to tested versions",
+  "Traffic switched, health checks passing",
+];
+
+/** Where the live app answers: Architect's domain, or a private address inside the customer's network. */
+export const liveHost = (project: Project, org: Org | null) =>
+  org?.deployTarget === "customer_cloud" ? `${project.slug}.apps.${org.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.internal` : `${project.slug}.architect.app`;
 
 export function ShipCanvas({
   project,
   j,
+  org,
   approvalRequired,
   onRequestReview,
   onDeploy,
   onOpenApprover,
   onApplyChanges,
+  onHandover,
+  onSaveBlueprint,
 }: {
   project: Project;
   j: Journey;
+  org: Org | null;
   approvalRequired: boolean;
   onRequestReview: () => void;
   onDeploy: () => void;
   onOpenApprover: () => void;
   onApplyChanges: () => void;
+  onHandover: (people: { builder: string; approver: string }) => Promise<void>;
+  onSaveBlueprint: () => Promise<void>;
 }) {
   const [deploying, setDeploying] = useState(-1);
   const [applying, setApplying] = useState(false);
   const blocked = j.demoData;
-  const canDeploy = !blocked && (!approvalRequired || j.review === "approved");
+  const noAccount = org?.deployTarget === "customer_cloud" && !org.cloudAccount;
+  const canDeploy = !blocked && !noAccount && (!approvalRequired || j.review === "approved");
+  const DEPLOY_STEPS = deploySteps(org);
 
   const deploy = () => {
     let i = 0;
@@ -54,7 +72,7 @@ export function ShipCanvas({
     setTimeout(tick, 900);
   };
 
-  if (project.stage === "live") return <LiveCanvas project={project} version={j.version} />;
+  if (project.stage === "live") return <LiveCanvas project={project} j={j} org={org} onHandover={onHandover} onSaveBlueprint={onSaveBlueprint} />;
 
   return (
     <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-8 sm:py-8 appear">
@@ -76,6 +94,19 @@ export function ShipCanvas({
             </div>
           </li>
         ))}
+        <li className="flex items-start gap-3 px-4 py-3">
+          {noAccount ? <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber" /> : <Check size={17} className="mt-0.5 shrink-0 text-green" />}
+          <div>
+            <p className="text-sm font-medium">Where it runs</p>
+            <p className="text-[13px] text-ink-2">
+              {org?.deployTarget === "customer_cloud"
+                ? noAccount
+                  ? `${org.name}'s cloud account isn't connected yet. Connect it in Workspace settings.`
+                  : `${org.name}'s ${org.cloudAccount}, in an isolated VPC`
+                : "Architect cloud"}
+            </p>
+          </div>
+        </li>
         <li className="flex items-start gap-3 px-4 py-3">
           {blocked ? <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber" /> : <Check size={17} className="mt-0.5 shrink-0 text-green" />}
           <div>
@@ -156,18 +187,116 @@ export function ShipCanvas({
   );
 }
 
-function LiveCanvas({ project, version }: { project: Project; version: number }) {
+function LiveCanvas({
+  project,
+  j,
+  org,
+  onHandover,
+  onSaveBlueprint,
+}: {
+  project: Project;
+  j: Journey;
+  org: Org | null;
+  onHandover: (people: { builder: string; approver: string }) => Promise<void>;
+  onSaveBlueprint: () => Promise<void>;
+}) {
+  const version = j.version;
   const changes = (version - 1) * CHANGE_COST;
   const actual = RECEIPT.build + RECEIPT.tests + RECEIPT.fixes + changes;
+  const customer = org?.kind === "customer";
+  const [builder, setBuilder] = useState("");
+  const [approver, setApprover] = useState("");
+  const [busy, setBusy] = useState<null | "handover" | "blueprint">(null);
+  const [error, setError] = useState<string | null>(null);
+  const valid = (e: string) => /^\S+@\S+\.\S+$/.test(e.trim());
+
+  const run = async (kind: "handover" | "blueprint", fn: () => Promise<void>) => {
+    setBusy(kind);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-[760px] px-4 py-6 sm:px-8 sm:py-8 appear">
       <p className="text-[13px] text-green">Live</p>
       <h2 className="mt-1 font-serif text-[32px] leading-tight">{project.name} is live</h2>
       <Link href={`/live/${project.slug}`} target="_blank" className="mt-2 inline-flex items-center gap-1.5 text-blue hover:underline">
-        {project.slug}.architect.app <ExternalLink size={14} />
+        {liveHost(project, org)} <ExternalLink size={14} />
       </Link>
+      {org?.deployTarget === "customer_cloud" && <p className="mt-1 text-[13px] text-ink-2">Running in {org.name}&apos;s {org.cloudAccount}. Its data stays in that account.</p>}
 
-      <section className="mt-8 rounded-lg border border-line bg-surface p-5">
+      {customer && (
+        <section className="mt-8 rounded-lg border border-line bg-surface p-5">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Handshake size={16} className="text-blue" /> Hand over to {org?.name}
+          </h3>
+          {j.handover ? (
+            <div className="mt-3 text-sm">
+              <p className="flex items-center gap-2 text-green">
+                <Check size={15} /> Handed over. {j.handover.emails.join(" and ")} {j.handover.emails.length > 1 ? "are" : "is"} invited to this workspace.
+              </p>
+              <p className="mt-2 text-ink-2">
+                They get the project as it stands: the repo, its agents and rules, the golden tests, the approval history and HANDOVER.md. Their builder makes future changes through chat; every change still runs the tests and comes to their approver.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="mt-1 text-sm text-ink-2">Invite the people who will own it. Nothing is rebuilt and nothing moves: they join this workspace, where the app already lives.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="text-[13px]">
+                  <span className="font-medium">Their builder</span>
+                  <span className="block text-ink-3">Makes future changes through chat</span>
+                  <input value={builder} onChange={(e) => setBuilder(e.target.value)} type="email" placeholder="ops.lead@customer.com" className="mt-1.5 h-9 w-full rounded-md border border-line-strong px-2.5 text-sm outline-none focus:border-blue" />
+                </label>
+                <label className="text-[13px]">
+                  <span className="font-medium">Their approver</span>
+                  <span className="block text-ink-3">Signs off every new version</span>
+                  <input value={approver} onChange={(e) => setApprover(e.target.value)} type="email" placeholder="risk@customer.com" className="mt-1.5 h-9 w-full rounded-md border border-line-strong px-2.5 text-sm outline-none focus:border-blue" />
+                </label>
+              </div>
+              <ul className="mt-4 grid gap-1.5 text-[13px] text-ink-2 sm:grid-cols-2">
+                {["Repo and GitAgent files", "Golden tests and their history", "Approval record, version by version", "HANDOVER.md, written from the project"].map((t) => (
+                  <li key={t} className="flex items-center gap-2">
+                    <Check size={13} className="text-green" /> {t}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 flex justify-end">
+                <Button variant="primary" disabled={busy !== null || !valid(builder) || !valid(approver)} onClick={() => run("handover", () => onHandover({ builder: builder.trim(), approver: approver.trim() }))}>
+                  {busy === "handover" ? <Loader2 size={15} className="animate-spin" /> : null} Invite and hand over
+                </Button>
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      <section className="mt-6 flex flex-col gap-3 rounded-lg border border-line bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Layers size={16} className="text-blue" /> Save as a blueprint
+          </h3>
+          <p className="mt-1 text-sm text-ink-2">
+            {j.blueprintSaved
+              ? "Saved. Start the next customer from it: Home, then Blueprints and templates."
+              : "Reuse this app for your next customer. The plan, agents and golden tests come along; files, accounts and data never do."}
+          </p>
+        </div>
+        {!j.blueprintSaved && (
+          <Button className="shrink-0" disabled={busy !== null} onClick={() => run("blueprint", onSaveBlueprint)}>
+            {busy === "blueprint" ? <Loader2 size={15} className="animate-spin" /> : null} Save blueprint
+          </Button>
+        )}
+      </section>
+      {error && <p className="mt-2 text-sm text-red">{error}</p>}
+
+      <section className="mt-6 rounded-lg border border-line bg-surface p-5">
         <h3 className="text-sm font-semibold">Receipt</h3>
         <dl className="mt-3 space-y-2 text-sm">
           <div className="flex justify-between">
@@ -213,10 +342,6 @@ function LiveCanvas({ project, version }: { project: Project; version: number })
           <RotateCcw size={13} /> Every future version keeps a one-click rollback to the one before.
         </p>
       </section>
-
-      <p className="mt-6 text-[13px] text-ink-2">
-        Next: changes to a live app happen in a new version: preview, tests, approval if your organisation requires it, then deploy. Live keeps running meanwhile.
-      </p>
     </div>
   );
 }

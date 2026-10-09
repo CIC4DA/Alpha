@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { GitBranch, LayoutTemplate, PenLine, ArrowUp } from "lucide-react";
-import { createProject, listProjects, type Project } from "@/lib/store";
+import { GitBranch, LayoutTemplate, PenLine, ArrowUp, Layers } from "lucide-react";
+import { createProject, getOrg, listBlueprints, listProjects, saveJourney, type Blueprint, type Org, type Project } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { SAMPLE_PROMPT } from "@/lib/fixtures";
 import { ProjectCard } from "@/components/project-card";
@@ -27,10 +27,33 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Project[] | null>(null);
+  const [org, setOrg] = useState<Org | null>(null);
+  const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
 
   useEffect(() => {
-    listProjects().then(setProjects).catch((e) => setError(e.message));
+    const load = () => {
+      listProjects().then(setProjects).catch((e) => setError(e.message));
+      getOrg().then(setOrg).catch(() => {});
+    };
+    load();
+    listBlueprints().then(setBlueprints).catch(() => {});
+    window.addEventListener("alpha:org", load);
+    return () => window.removeEventListener("alpha:org", load);
   }, []);
+
+  // A blueprint carries the plan's answers and tests, never the earlier customer's files or accounts.
+  const fromBlueprint = async (b: Blueprint) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const p = await createProject(b.prompt, b.name);
+      await saveJourney(p.id, { answers: b.answers, suggestedOn: b.suggestedOn, fromBlueprint: b.source });
+      router.push(`/p/${p.id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
 
   const start = async (text: string) => {
     if (text.trim().length < 12) return setError("Describe what the app should do in a sentence or two.");
@@ -50,8 +73,14 @@ export default function HomePage() {
 
   return (
     <div className="mx-auto max-w-[1040px] px-4 py-8 sm:px-8 sm:py-12">
-      <h1 className="font-serif text-[30px] leading-tight sm:text-[40px] tracking-[-0.01em]">What should we build{first ? `, ${first}` : ""}?</h1>
-      <p className="mt-2 text-ink-2">Describe the work you want automated. You&apos;ll see a plan and its price before anything is built.</p>
+      <h1 className="font-serif text-[30px] leading-tight tracking-[-0.01em] sm:text-[40px]">
+        {org?.kind === "customer" ? `What should we build for ${org.name}?` : `What should we build${first ? `, ${first}` : ""}?`}
+      </h1>
+      <p className="mt-2 text-ink-2">
+        {org?.kind === "customer"
+          ? "Describe their process, or start from one of your blueprints. You'll see a plan and its price before anything is built."
+          : "Describe the work you want automated. You'll see a plan and its price before anything is built."}
+      </p>
 
       <div className="mt-8 rounded-xl border border-line-strong bg-surface">
         <div className="flex gap-1 overflow-x-auto border-b border-line px-3 pt-2" role="tablist">
@@ -59,7 +88,7 @@ export default function HomePage() {
             [
               ["describe", "Describe it", PenLine],
               ["import", "Import from GitHub", GitBranch],
-              ["template", "Start from a template", LayoutTemplate],
+              ["template", blueprints.length ? "Blueprints and templates" : "Start from a template", LayoutTemplate],
             ] as const
           ).map(([id, label, Icon]) => (
             <button
@@ -110,6 +139,25 @@ export default function HomePage() {
           </div>
         )}
 
+        {mode === "template" && blueprints.length > 0 && (
+          <div className="border-b border-line p-4">
+            <p className="text-[13px] font-medium text-ink-2">Your blueprints</p>
+            <p className="text-[12px] text-ink-3">Apps you delivered before. The plan and tests come along; this customer connects their own files and accounts.</p>
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+              {blueprints.map((b) => (
+                <li key={b.id}>
+                  <button onClick={() => fromBlueprint(b)} disabled={busy} className="flex w-full items-start gap-3 rounded-lg border border-line-strong p-3 text-left hover:border-blue">
+                    <Layers size={16} className="mt-0.5 shrink-0 text-blue" />
+                    <span>
+                      <span className="block text-sm font-medium">{b.name}</span>
+                      <span className="block text-[12px] text-ink-3">{b.source}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {mode === "template" && (
           <div className="grid gap-px bg-line sm:grid-cols-2">
             {TEMPLATES.map((t) => (

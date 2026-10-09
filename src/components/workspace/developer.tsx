@@ -15,9 +15,10 @@ const TABS: { id: DevTab; label: string }[] = [
   { id: "agent", label: "Your coding agent" },
 ];
 
-function Files({ initial }: { initial?: string }) {
-  const [path, setPath] = useState(initial ?? FILES[0].path);
-  const file = FILES.find((f) => f.path === path) ?? FILES[0];
+function Files({ initial, extra }: { initial?: string; extra: { path: string; body: string }[] }) {
+  const all = [...extra, ...FILES];
+  const [path, setPath] = useState(initial ?? all[0].path);
+  const file = all.find((f) => f.path === path) ?? all[0];
   const lines = file.body.replace(/\n$/, "").split("\n");
   return (
     <div className="grid h-full grid-cols-[260px_1fr]">
@@ -25,7 +26,7 @@ function Files({ initial }: { initial?: string }) {
         <p className="flex items-center gap-1.5 px-3 py-1 text-ink-3">
           <Folder size={13} /> loan-triage-desk
         </p>
-        {FILES.map((f) => (
+        {all.map((f) => (
           <button
             key={f.path}
             onClick={() => setPath(f.path)}
@@ -222,7 +223,7 @@ function CodingAgent() {
   );
 }
 
-export function DeveloperCanvas({ tab, onTab, buildDone, initialFile }: { tab: DevTab; onTab: (t: DevTab) => void; buildDone: number; initialFile?: string }) {
+export function DeveloperCanvas({ tab, onTab, buildDone, initialFile, extraFiles = [] }: { tab: DevTab; onTab: (t: DevTab) => void; buildDone: number; initialFile?: string; extraFiles?: { path: string; body: string }[] }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex gap-1 border-b border-line bg-surface px-4" role="tablist">
@@ -239,7 +240,7 @@ export function DeveloperCanvas({ tab, onTab, buildDone, initialFile }: { tab: D
         ))}
       </div>
       <div className="min-h-0 flex-1">
-        {tab === "files" && <Files initial={initialFile} />}
+        {tab === "files" && <Files initial={initialFile} extra={extraFiles} />}
         {tab === "traces" && <Traces />}
         {tab === "logs" && <Logs done={buildDone} />}
         {tab === "env" && <Env />}

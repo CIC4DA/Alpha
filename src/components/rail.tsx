@@ -7,6 +7,7 @@ import { Home, Inbox, FolderKanban, Bot, Plug, Compass, Settings, LifeBuoy, LogO
 import { listProjects, type Project } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { StatusBadge } from "./ui";
+import { WorkspaceSwitcher } from "./workspace-switcher";
 
 export function Mark({ className = "" }: { className?: string }) {
   // A set square: the drafting tool, not a letter in a box.
@@ -77,6 +78,10 @@ export function Rail({ collapsedByDefault = false }: { collapsedByDefault?: bool
         </button>
       </div>
 
+      <div className="px-2 pb-2">
+        <WorkspaceSwitcher collapsed={collapsed} />
+      </div>
+
       {/* Recents first: returning to yesterday's work is the most common thing people do. */}
       <div className="px-2 pb-2">
         {!collapsed ? (
@@ -112,7 +117,7 @@ export function Rail({ collapsedByDefault = false }: { collapsedByDefault?: bool
       <nav className="flex flex-col gap-0.5 px-2">{NAV.map((n) => item(n.href, n.label, n.icon))}</nav>
 
       <div className="mt-auto flex flex-col gap-0.5 border-t border-line px-2 py-2">
-        {item("/settings", "Organisation settings", Settings)}
+        {item("/settings", "Workspace settings", Settings)}
         {item("/help", "Help", LifeBuoy)}
         <div className={`mt-1 flex items-center gap-2 rounded-md px-2.5 py-2 ${collapsed ? "justify-center" : ""}`}>
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-[12px] font-semibold text-white">

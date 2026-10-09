@@ -1,15 +1,6 @@
 import { notFound } from "next/navigation";
 
 const SECTIONS: Record<string, { title: string; lead: string; points: string[] }> = {
-  agents: {
-    title: "Agents",
-    lead: "Every agent across your organisation's projects, so a good one can be reused instead of rebuilt.",
-    points: [
-      "Each agent is a GitAgent folder in its project's repo: identity, rules, tools, model and memory as plain files.",
-      "See which projects use an agent, its model, its test pass rate and its cost per run.",
-      "Publish an agent to your organisation so other builders can add it to their projects.",
-    ],
-  },
   connections: {
     title: "Connections",
     lead: "Accounts and services your apps use, connected once for the whole organisation.",
