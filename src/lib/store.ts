@@ -175,6 +175,7 @@ export async function createProject(prompt: string, named?: string): Promise<Pro
     })
     .select("*")
     .single();
+  if (error?.code === "42501") throw new Error("Your role in this workspace doesn't include building. Ask an admin for the builder role.");
   if (error) throw new Error(error.message);
   announceProjectsChanged();
   return fromRow(data as Row);
@@ -206,8 +207,9 @@ export async function deleteProject(id: string): Promise<void> {
     announceProjectsChanged();
     return;
   }
-  const { error } = await getSupabase()!.from("projects").delete().eq("id", id);
+  const { data, error } = await getSupabase()!.from("projects").delete().eq("id", id).select("id");
   if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("Only the person who created this project can delete it.");
   announceProjectsChanged();
 }
 
@@ -236,15 +238,20 @@ function demoOrgs(): Org[] {
   return list;
 }
 
-let invitesChecked = false;
+// Claim pending invitations once per sign-in, before the first workspace list, so a new workspace shows straight away.
+let accepting: Promise<void> | null = null;
+export function resetInvitationCheck() {
+  accepting = null;
+}
 
 export async function listOrgs(): Promise<Org[]> {
   if (isDemo()) return demoOrgs();
   const sb = getSupabase()!;
-  if (!invitesChecked) {
-    invitesChecked = true;
-    await sb.rpc("accept_invitations").then(() => {}, () => {}); // turns pending invites for this email into memberships
-  }
+  accepting ??= Promise.resolve(sb.rpc("accept_invitations")).then(
+    () => {},
+    () => {},
+  );
+  await accepting;
   const { data, error } = await sb.from("organisations").select(ORG_COLS).order("created_at");
   if (error) throw new Error(error.message);
   if (!data?.length) throw new Error("No workspace found for this account. Run supabase/schema.sql, then sign in again.");
@@ -294,8 +301,10 @@ export async function updateOrg(patch: Partial<Org>): Promise<void> {
   if (patch.approvalRequired !== undefined) row.approval_required = patch.approvalRequired;
   if (patch.deployTarget !== undefined) row.deploy_target = patch.deployTarget;
   if (patch.cloudAccount !== undefined) row.cloud_account = patch.cloudAccount;
-  const { error } = await getSupabase()!.from("organisations").update(row).eq("id", o.id);
+  if (!Object.keys(row).length) return;
+  const { data, error } = await getSupabase()!.from("organisations").update(row).eq("id", o.id).select("id");
   if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("Only an admin of this workspace can change its settings.");
   announceOrgChanged();
 }
 
@@ -318,6 +327,8 @@ export async function invite(email: string, role: Role): Promise<Invite> {
     return inv;
   }
   const { data, error } = await getSupabase()!.from("invitations").insert({ org_id: o.id, email: clean, role }).select("id, created_at").single();
+  if (error?.code === "23505") throw new Error("That email is already invited to this workspace.");
+  if (error?.code === "42501") throw new Error("Only an admin of this workspace can invite people.");
   if (error) throw new Error(error.message);
   return { id: data.id, orgId: o.id, email: clean, role, status: "pending", createdAt: data.created_at };
 }

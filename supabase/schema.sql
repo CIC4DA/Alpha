@@ -27,7 +27,7 @@ create table if not exists public.memberships (
 create table if not exists public.projects (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organisations(id) on delete cascade,
-  created_by uuid not null default auth.uid() references auth.users(id),
+  created_by uuid default auth.uid() references auth.users(id) on delete set null,
   name text not null,
   description text not null default '',
   prompt text not null default '',
@@ -90,9 +90,9 @@ create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
   new_org uuid;
-  display text := coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1));
+  display text := coalesce(new.raw_user_meta_data->>'full_name', nullif(split_part(coalesce(new.email, ''), '@', 1), ''));
 begin
-  insert into public.organisations (name) values (display || '''s organisation') returning id into new_org;
+  insert into public.organisations (name) values (coalesce(display || '''s organisation', 'My organisation')) returning id into new_org;
   insert into public.memberships (org_id, user_id, is_admin) values (new_org, new.id, true);
   return new;
 end;
@@ -110,7 +110,7 @@ declare
   new_org uuid;
 begin
   for u in select id, email from auth.users where not exists (select 1 from public.memberships m where m.user_id = auth.users.id) loop
-    insert into public.organisations (name) values (split_part(u.email, '@', 1) || '''s organisation') returning id into new_org;
+    insert into public.organisations (name) values (coalesce(nullif(split_part(coalesce(u.email, ''), '@', 1), '') || '''s workspace', 'My workspace')) returning id into new_org;
     insert into public.memberships (org_id, user_id, is_admin) values (new_org, u.id, true);
   end loop;
 end $$;
@@ -147,7 +147,7 @@ create table if not exists public.invitations (
   email text not null,
   role text not null check (role in ('admin','builder','developer','approver')),
   status text not null default 'pending' check (status in ('pending','accepted')),
-  invited_by uuid not null default auth.uid() references auth.users(id),
+  invited_by uuid default auth.uid() references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (org_id, email)
 );
@@ -177,6 +177,7 @@ declare
   inv record;
   n int := 0;
 begin
+  if p_user is null or p_email is null then return 0; end if;
   for inv in select * from public.invitations where lower(email) = lower(p_email) and status = 'pending' loop
     insert into public.memberships (org_id, user_id, is_admin, permissions)
       values (inv.org_id, p_user, inv.role = 'admin', public.role_permissions(inv.role))
@@ -191,20 +192,22 @@ $$;
 -- Called by the app after sign-in, for people who already had an account when they were invited.
 create or replace function public.accept_invitations()
 returns int language sql security definer set search_path = public as $$
-  select public.accept_invitations_for(auth.uid(), (select email from auth.users where id = auth.uid()));
+  -- Only a confirmed email can claim an invitation, so signing up with someone else's address gets nothing.
+  select public.accept_invitations_for(auth.uid(), (select email from auth.users where id = auth.uid() and email_confirmed_at is not null));
 $$;
 grant execute on function public.accept_invitations() to authenticated;
+-- Internal helpers: Supabase grants new functions to everyone, so take that back. Their security definer callers still work.
+revoke execute on function public.accept_invitations_for(uuid, text) from public, anon, authenticated;
 
--- New users: their own workspace, plus any workspaces they were invited to.
+-- New users get their own workspace. Invitations are claimed after sign-in, once the email is confirmed.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
   new_org uuid;
-  display text := coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1));
+  display text := coalesce(new.raw_user_meta_data->>'full_name', nullif(split_part(coalesce(new.email, ''), '@', 1), ''));
 begin
-  insert into public.organisations (name) values (display || '''s workspace') returning id into new_org;
+  insert into public.organisations (name) values (coalesce(display || '''s workspace', 'My workspace')) returning id into new_org;
   insert into public.memberships (org_id, user_id, is_admin) values (new_org, new.id, true);
-  perform public.accept_invitations_for(new.id, new.email);
   return new;
 end;
 $$;
@@ -227,3 +230,39 @@ alter table public.blueprints enable row level security;
 drop policy if exists "owners use their blueprints" on public.blueprints;
 create policy "owners use their blueprints" on public.blueprints
   for all using (owner = auth.uid()) with check (owner = auth.uid());
+
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+
+-- Projects: who created a project and which workspace it belongs to are set by the database, not the client.
+-- Going live needs the deploy permission. (The separate-approver check runs in the app in this prototype.)
+create or replace function public.guard_project()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' then
+    new.created_by := auth.uid();
+  elsif pg_trigger_depth() = 1 then  -- a direct client update, not the ON DELETE SET NULL from auth.users
+    new.created_by := old.created_by;
+    new.org_id := old.org_id;
+    if ((new.status = 'live' and old.status <> 'live') or (new.stage = 'live' and old.stage <> 'live'))
+       and auth.uid() is not null and not exists (
+      select 1 from public.memberships m where m.org_id = old.org_id and m.user_id = auth.uid() and 'deploy' = any(m.permissions)
+    ) then
+      raise exception 'You need the deploy permission in this workspace to put a version live';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke execute on function public.guard_project() from public, anon, authenticated;
+
+drop trigger if exists guard_project on public.projects;
+create trigger guard_project before insert or update on public.projects
+  for each row execute function public.guard_project();
+
+-- Databases created before these columns could be emptied when a user is deleted.
+alter table public.projects alter column created_by drop not null;
+alter table public.projects drop constraint if exists projects_created_by_fkey;
+alter table public.projects add constraint projects_created_by_fkey foreign key (created_by) references auth.users(id) on delete set null;
+alter table public.invitations alter column invited_by drop not null;
+alter table public.invitations drop constraint if exists invitations_invited_by_fkey;
+alter table public.invitations add constraint invitations_invited_by_fkey foreign key (invited_by) references auth.users(id) on delete set null;

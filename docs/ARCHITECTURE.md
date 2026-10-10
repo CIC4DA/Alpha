@@ -6,7 +6,7 @@ How we would build Architect 2.0 for real: every service, why we chose it, and w
 
 ## Design principles
 
-Six decisions shape everything below. Each one exists to make "prototype to production in one project" true.
+Seven decisions shape everything below. Each one exists to make "prototype to production in one project" true.
 
 1. **The repo is the source of truth.** Every project is a git repository: app code, agents as GitAgent files, the plan as `PLAN.md`, golden tests, environment config. The builder's chat, the developer's IDE and a coding agent over MCP all produce commits to the same repo. That is what makes handoff, rollback and GitHub sync work without a second copy of anything.
 2. **Generated code is untrusted.** It runs only inside isolated microVM sandboxes, never on shared hosts, and sandboxes never hold long-lived secrets. Credentials are injected by a proxy on the way out.
@@ -14,6 +14,7 @@ Six decisions shape everything below. Each one exists to make "prototype to prod
 4. **Models sit behind one gateway.** Prompts and tool definitions are written once in a neutral format; the gateway translates per provider. Switching a model is a config change, checked by the test suite before it goes live.
 5. **Nothing ships untested.** Tests are their own service, not a step the agent may skip. Preview and production are separate environments, and only a version that passed its tests, and its approval when the organisation requires one, can be promoted.
 6. **Pay only for what is active.** Sandboxes sleep when nobody is using them and resume from a snapshot, so thousands of projects cost what the active few hundred cost.
+7. **One workspace per customer.** An FDE's customers never share anything: each workspace has its own members, secrets, sandboxes, model budgets and deploy target, and the database enforces the boundary with row-level security.
 
 ## The big picture
 
@@ -46,7 +47,7 @@ How to read it: the web app talks to the control plane through the API gateway a
 | Egress proxy | Default-deny outbound traffic; adds credentials on the way out | Envoy with per-organisation policy | Secrets never enter the VM |
 | Model gateway | One API for every model; routing, fallbacks, budgets, cost | LiteLLM plus our capability registry | Model-agnostic, self-hostable |
 | App runtime | Runs deployed apps | Kubernetes with gVisor or Kata pods, scale to zero | Generated code stays isolated in production too |
-| Agent runtime | Runs the app's agents in production | Lyzr Agent Studio | Lyzr's existing control plane for agents |
+| Agent runtime | Runs the app's agents in production | Lyzr agent runtime (Studio's backend) | Lyzr's existing control plane for agents |
 | Knowledge service | Indexes uploaded documents with clause and page metadata; versions them | Lyzr knowledge bases | Citations need structure, and tested versions must match production |
 | Connection broker | OAuth connections to Gmail, Slack and others; token refresh | Our own service on the vault | Tokens managed once per organisation, never handed to code |
 | Data stores | Metadata, routing, events, files, repos, secrets, images | Postgres, Redis, NATS, S3, Forgejo, Vault, ECR | Managed or proven open source; detailed under Deploying Architect itself |
@@ -274,6 +275,22 @@ Every project already has a repository in Architect's own **Git service**, so pr
 
 Its tools (read the plan, list and run tests, read traces, update an agent, start a preview, request review, deploy) are thin wrappers over the same internal API the web app uses. There is no side door: roles, approval rules, budgets and the audit log apply exactly as they do in the browser. The CLI uses the same API.
 
+## Workspaces, handover and blueprints
+
+An FDE works across customers, so the unit of isolation is the **workspace**: one per customer, plus the FDE's own. Everything else in this doc happens inside one.
+
+**What a workspace owns.** Members and their roles, projects and their repos, connections and secrets, the approval rule, model budgets and the deploy target. Every row in the control-plane database carries its workspace id, and Postgres row-level security filters on membership, so a bug in one service can't read across customers. Sandboxes, vault paths and gateway keys are scoped the same way.
+
+**Roles and invitations.** Roles map to permissions: builder (build), developer (build and edit code), approver (approve and deploy), admin (all of these, plus members and settings). An invitation is a row keyed by email; the first sign-in with that email turns it into a membership. With no roles set, every member can do all four. When the workspace requires a separate approver, the Deploy service rejects an approval from the person who requested the review; the check runs on the server, not in the UI.
+
+**Deploy target.** Each workspace deploys either to Architect's cloud or to the customer's own cloud account. For a customer account, the customer creates a deploy role scoped to one VPC from a template we provide. The Deploy service assumes that role and runs the same pipeline there, and the app's agents reach the Model gateway through a private endpoint. This is lighter than the VPC edition below: only the apps run in the customer's account, not Architect itself.
+
+**Handover.** Nothing moves at handover. The customer's people are invited into the workspace where the app already lives, and an admin role can pass to them. The Git service writes `HANDOVER.md` from the repo (agents, rules, golden tests, where it runs, how changes flow), so it can't drift from what was built.
+
+**Blueprints.** A blueprint is a template repo in the FDE's own library: the plan, the GitAgent folders, the golden-test definitions and the plan's answers. It never contains the customer's files, connection references, data or test fixtures. The Git service builds it from an allowlist of paths, and a scan for secrets and personal data runs before it is saved. Starting from a blueprint creates a new repo in the current workspace with Connect empty, so the new customer's golden tests run on their own files.
+
+**The Agents page replaces Studio.** It reads run counts, cost and failures per agent from the agent runtime's run log and the gateway's cost records, filtered to the workspace. Editing an agent there or in its project commits to its GitAgent folder and goes through the golden tests like any other change. Studio's runtime stays underneath; users never open it.
+
 ## Deploying user apps
 
 Deploy is a pipeline run by the **Deploy service** as a durable workflow; each stage gates the next. A preview is a dev server in a sandbox, so nothing is promoted from it directly: production always gets a fresh production build that has passed its tests.
@@ -296,7 +313,7 @@ Deploy is a pipeline run by the **Deploy service** as a durable workflow; each s
 | Part of the app | Runs on | Notes |
 | --- | --- | --- |
 | Frontend and API | **App runtime**: containers on Kubernetes, scaled to zero when idle | Generated code is untrusted here too, so app pods run under a sandboxed runtime (gVisor or Kata), not plain containers |
-| Agents | **Lyzr Agent runtime**, the existing Agent Studio control plane | GitAgent-defined agents in other frameworks run as their own containers beside the app |
+| Agents | **Lyzr Agent runtime**, the backend Studio runs on today, with Architect as its only front end | GitAgent-defined agents in other frameworks run as their own containers beside the app |
 | Knowledge bases | **Knowledge service** | Versioned per release, so the policy that was tested is the policy in production |
 | Database | Managed Postgres per app | Branches for preview and staging; backups; row-level security |
 | Connected services | **Connection broker** through the Egress proxy | Tokens are refreshed centrally and never handed to app code |

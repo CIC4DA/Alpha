@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { getSupabase, supabaseConfigured } from "./supabase";
+import { resetInvitationCheck } from "./store";
 
 export type User = { id: string; email: string; name: string };
 type Mode = "supabase" | "demo";
@@ -62,7 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       apply(data.session);
       setReady(true);
     });
-    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => apply(session));
+    const { data: sub } = sb.auth.onAuthStateChange((e, session) => {
+      if (e === "SIGNED_IN" || e === "SIGNED_OUT") resetInvitationCheck();
+      apply(session);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
