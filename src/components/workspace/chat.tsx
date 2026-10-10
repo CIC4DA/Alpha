@@ -102,7 +102,10 @@ export function ChatPane({
 }) {
   const [text, setText] = useState("");
   const end = useRef<HTMLDivElement>(null);
-  useEffect(() => end.current?.scrollIntoView({ behavior: "smooth", block: "end" }), [items.length, question]);
+  // Braces matter: newer browsers return a Promise from scrollIntoView, and an effect must not return one.
+  useEffect(() => {
+    end.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [items.length, question]);
 
   const send = () => {
     if (!text.trim()) return;
