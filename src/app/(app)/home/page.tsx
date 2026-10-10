@@ -11,10 +11,10 @@ import { ProjectCard } from "@/components/project-card";
 import { Button } from "@/components/ui";
 
 const TEMPLATES = [
-  { name: "Loan application triage", detail: "Extract facts from PDFs, check a lending policy with citations, draft replies.", prompt: SAMPLE_PROMPT },
-  { name: "Meeting brief assistant", detail: "Reads tomorrow's calendar and prepares a one-page brief per meeting.", prompt: "Build a meeting brief assistant that reads my Google Calendar each evening and prepares a one-page brief for every external meeting tomorrow, with attendee background and open threads from email." },
-  { name: "Support ticket triage", detail: "Classify incoming tickets, suggest replies from the help centre, route urgent ones.", prompt: "Build a support ticket triage app that classifies new Zendesk tickets by topic and urgency, drafts a reply from our help-centre articles with links, and routes urgent ones to the on-call lead on Slack." },
-  { name: "Invoice checker", detail: "Match supplier invoices to purchase orders and flag mismatches before payment.", prompt: "Build an invoice checker that matches each supplier invoice PDF to its purchase order, flags price or quantity mismatches with the line it found, and sends a weekly summary to finance." },
+  { name: "Loan application triage", detail: "Extract facts from PDFs, check a lending policy with citations, draft replies.", prompt: SAMPLE_PROMPT, ready: true },
+  { name: "Meeting brief assistant", detail: "Reads tomorrow's calendar and prepares a one-page brief per meeting.", prompt: "Build a meeting brief assistant that reads my Google Calendar each evening and prepares a one-page brief for every external meeting tomorrow, with attendee background and open threads from email.", ready: false },
+  { name: "Support ticket triage", detail: "Classify incoming tickets, suggest replies from the help centre, route urgent ones.", prompt: "Build a support ticket triage app that classifies new Zendesk tickets by topic and urgency, drafts a reply from our help-centre articles with links, and routes urgent ones to the on-call lead on Slack.", ready: false },
+  { name: "Invoice checker", detail: "Match supplier invoices to purchase orders and flag mismatches before payment.", prompt: "Build an invoice checker that matches each supplier invoice PDF to its purchase order, flags price or quantity mismatches with the line it found, and sends a weekly summary to finance.", ready: false },
 ];
 
 type Mode = "describe" | "import" | "template";
@@ -161,9 +161,17 @@ export default function HomePage() {
         {mode === "template" && (
           <div className="grid gap-px bg-line sm:grid-cols-2">
             {TEMPLATES.map((t) => (
-              <button key={t.name} onClick={() => start(t.prompt)} disabled={busy} className="bg-surface p-4 text-left hover:bg-blue-wash/50">
-                <p className="font-medium">{t.name}</p>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{t.detail}</p>
+              <button
+                key={t.name}
+                onClick={() => start(t.prompt)}
+                disabled={busy || !t.ready}
+                className="bg-surface p-4 text-left enabled:hover:bg-blue-wash/50 disabled:cursor-not-allowed"
+              >
+                <p className="flex items-center justify-between gap-2 font-medium">
+                  <span className={t.ready ? "" : "text-ink-3"}>{t.name}</span>
+                  {!t.ready && <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 text-[11px] font-normal text-ink-3">Coming soon</span>}
+                </p>
+                <p className={`mt-1 text-[13px] leading-relaxed ${t.ready ? "text-ink-2" : "text-ink-3"}`}>{t.detail}</p>
               </button>
             ))}
           </div>
