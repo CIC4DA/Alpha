@@ -14,6 +14,7 @@ type AuthState = {
   configured: boolean;
   signInWithProvider: (provider: "google" | "github") => Promise<string | null>;
   signInWithEmail: (email: string) => Promise<string | null>;
+  signInWithPassword: (email: string, password: string) => Promise<string | null>;
   startDemo: () => void;
   signOut: () => Promise<void>;
 };
@@ -84,6 +85,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return error ? error.message : null;
   }, []);
 
+  // Password sign-in exists for shared test accounts (a reviewer can't receive a magic link).
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
+    const sb = getSupabase();
+    if (!sb) return "Sign-in isn't configured. Use demo mode.";
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error?.message === "Invalid login credentials") return "That email and password don't match an account.";
+    return error ? error.message : null;
+  }, []);
+
   const startDemo = useCallback(() => {
     const demo: User = { id: "demo-user", email: "demo@architect.local", name: "Demo builder" };
     localStorage.setItem(DEMO_KEY, JSON.stringify(demo));
@@ -102,8 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [mode]);
 
   const value = useMemo(
-    () => ({ ready, user, mode, configured: supabaseConfigured, signInWithProvider, signInWithEmail, startDemo, signOut }),
-    [ready, user, mode, signInWithProvider, signInWithEmail, startDemo, signOut],
+    () => ({ ready, user, mode, configured: supabaseConfigured, signInWithProvider, signInWithEmail, signInWithPassword, startDemo, signOut }),
+    [ready, user, mode, signInWithProvider, signInWithEmail, signInWithPassword, startDemo, signOut],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

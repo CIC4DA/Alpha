@@ -35,9 +35,11 @@ function GitHubIcon() {
 }
 
 export default function LoginPage() {
-  const { ready, user, configured, signInWithProvider, signInWithEmail, startDemo } = useAuth();
+  const { ready, user, configured, signInWithProvider, signInWithEmail, signInWithPassword, startDemo } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [usePassword, setUsePassword] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -58,7 +60,14 @@ export default function LoginPage() {
   const emailLink = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.includes("@")) return setError("Enter your work email address.");
+    setError(null);
     setBusy(true);
+    if (usePassword) {
+      const err = await signInWithPassword(email.trim(), password);
+      setBusy(false);
+      if (err) setError(err); // on success the session change sends you to Home
+      return;
+    }
     const err = await signInWithEmail(email);
     setBusy(false);
     if (err) setError(err);
@@ -140,9 +149,34 @@ export default function LoginPage() {
                     placeholder="you@company.com"
                     className="h-10 rounded-md border border-line-strong bg-surface px-3 text-sm outline-none focus:border-blue"
                   />
-                  <Button type="submit" variant="primary" disabled={busy} className="w-full">
-                    <Mail size={16} /> Email me a sign-in link
+                  {usePassword && (
+                    <>
+                      <label htmlFor="password" className="text-[13px] font-medium text-ink-2">
+                        Password
+                      </label>
+                      <input
+                        id="password"
+                        type="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="h-10 rounded-md border border-line-strong bg-surface px-3 text-sm outline-none focus:border-blue"
+                      />
+                    </>
+                  )}
+                  <Button type="submit" variant="primary" disabled={busy || (usePassword && !password)} className="w-full">
+                    {usePassword ? (busy ? "Signing in" : "Sign in") : <><Mail size={16} /> Email me a sign-in link</>}
                   </Button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUsePassword((v) => !v);
+                      setError(null);
+                    }}
+                    className="text-center text-[13px] text-blue hover:underline"
+                  >
+                    {usePassword ? "Email me a link instead" : "Sign in with a password"}
+                  </button>
                 </form>
               )}
             </div>
