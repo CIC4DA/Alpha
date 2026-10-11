@@ -41,6 +41,7 @@ Also in the prototype:
 - **Agents page**: every agent in the workspace with its model, runs, cost and failures, editable in place. Studio and GitAgent live inside Architect; nobody has to go to either.
 - **Workspace settings**: require a separate approver (maker-checker), choose where apps run, invite people by role. With no setup, everyone can do everything.
 - **Navigation**: a persistent rail with recent projects, projects named from the prompt with a description, statuses, an Inbox for everything waiting on you, and import from GitHub.
+- **Explore and Help**: ideas by role, a prompt library, a marketplace of community apps to remix, templates, design systems and tutorials in one Explore page; a Help page and a support chat that answers from the help articles. Marketplace listings, status and the support hand-over are sample data.
 - **Pull requests from your editor**: a developer works in Cursor, Claude Code or Codex and opens a pull request. Architect runs the golden tests, on outcome and reason, and the plan's rules on the branch; merge is blocked while anything fails, and the failures go back to the coding agent as a review comment. A merge becomes a version, reviewed like any other.
 - **Compare models on the golden tests**: for any agent, run its cases on several models side by side, with pass or fail per case and why, cost per case and per month at the customer's volume, and speed. A model can be switched in only if it passes every case; the switch is a version you can revert.
 - **Blueprints page**: blueprints are versioned. When the original customer's app improves, publish the change as the next version, see every customer project built from it across your workspaces and which are behind, and roll it out. Each roll-out is tested on that customer's own files and goes live through their review.
@@ -64,8 +65,10 @@ Architect 2.0 adds to the product for developers and FDEs; every feature in toda
 | Database tab: tables, row counts, rows and schema, search | Developer view, Database: the same, read-only on the preview branch |
 | More menu: refresh, share, download code, environment variables, duplicate, file tree, delete | Same menu; download builds a real zip, duplicate makes a real copy (reviews and the live deployment aren't copied), delete asks twice |
 | Edit Agents (Studio), GitHub, Deploy | Agents edited in place, GitHub in the developer view, Ship stage with review and receipt |
+| Get started menu: how it works, prompt library, marketplace, what should I build, resources, docs, design systems, Discord, Lyzr University | One Explore page with tabs: What should I build (pick a role, get ideas with estimated time saved), Prompt library (categories, search), Marketplace (filters, sort, remix), Templates, Design systems (default for new apps, with a preview), Learn (how it works, tutorials and use cases, docs and community links). Every prompt opens on Home, ready to plan |
+| Help & Support, support chat bubble | A Help page (search, guides by role, common questions, what's new, status) and a support chat on every page that answers from the help articles and hands over to a person |
 
-Not built in the prototype: the dark theme and the support chat.
+Not built in the prototype: the dark theme.
 
 ### What's real and what's scripted
 

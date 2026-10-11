@@ -10,20 +10,6 @@ const SECTIONS: Record<string, { title: string; lead: string; points: string[] }
       "See which projects use each connection, and revoke it in one place.",
     ],
   },
-  explore: {
-    title: "Explore",
-    lead: "Ideas and learning, in one place instead of eight sidebar entries.",
-    points: [
-      "The AI consultant: tell it your role and your weekly bottlenecks, get app ideas with estimated time saved.",
-      "Templates and the prompt library, each tested end to end.",
-      "The marketplace, guides and the community.",
-    ],
-  },
-  help: {
-    title: "Help",
-    lead: "Guides, support and what's new.",
-    points: ["Getting-started guide for builders, developers and approvers.", "Contact support.", "Changelog."],
-  },
 };
 
 export default async function SectionPage({ params }: { params: Promise<{ section: string }> }) {

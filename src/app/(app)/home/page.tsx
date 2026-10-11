@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { takePrefill } from "@/lib/prefill";
 import Link from "next/link";
 import { GitBranch, LayoutTemplate, PenLine, ArrowUp, Layers } from "lucide-react";
 import { createProject, getOrg, listBlueprints, listProjects, saveJourney, type Blueprint, type Org, type Project } from "@/lib/store";
@@ -27,6 +28,14 @@ export default function HomePage() {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [org, setOrg] = useState<Org | null>(null);
   const [blueprints, setBlueprints] = useState<Blueprint[]>([]);
+
+  useEffect(() => {
+    const handed = takePrefill();
+    if (handed) {
+      setPrompt(handed);
+      setMode("describe");
+    }
+  }, []);
 
   useEffect(() => {
     const load = () => {

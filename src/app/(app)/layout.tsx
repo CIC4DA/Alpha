@@ -4,6 +4,7 @@ import { Suspense, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { Rail } from "@/components/rail";
+import { SupportChat, SupportProvider } from "@/components/support";
 
 function Gate({ children }: { children: React.ReactNode }) {
   const { ready, user } = useAuth();
@@ -20,10 +21,14 @@ function Gate({ children }: { children: React.ReactNode }) {
 
   const inProject = pathname.startsWith("/p/");
   return (
-    <div className="flex min-h-screen">
-      <Rail collapsedByDefault={inProject} />
-      <main className="min-w-0 flex-1">{children}</main>
-    </div>
+    <SupportProvider>
+      <div className="flex min-h-screen">
+        <Rail collapsedByDefault={inProject} />
+        <main className="min-w-0 flex-1">{children}</main>
+      </div>
+      {/* In a project the chat and canvas fill the screen, so support opens from Help in the rail instead of a bubble. */}
+      <SupportChat bubble={!inProject} />
+    </SupportProvider>
   );
 }
 
