@@ -20,9 +20,9 @@ Seven decisions shape everything below. Each one exists to make "prototype to pr
 
 Architect 2.0 has five layers: the edge that people and tools connect to, a stateless control plane, a shaded zone where generated code runs, the production runtime for deployed apps, and shared data. Generated code never leaves the shaded zone except as a tested production build.
 
-![Architecture · every service, five layers, the main paths](architecture-diagram.png)
+![Architecture: every service, five layers, the main paths](architecture-diagram.png)
 
-How to read it: the web app talks to the control plane through the API gateway and sees the app it is building through the Preview proxy, the line on the left. Coding agents arrive through the MCP server and GitHub through the GitHub App, both onto the same control plane. The Run orchestrator drives sandboxes through the Sandbox manager, and every model call, from the harness, sandboxes or deployed apps, goes through the Model gateway. End users reach deployed apps through App ingress, the line on the right. The Deploy service promotes tested builds into the production runtime, and the Test service, highlighted, is the gate in front of it.
+How to read it: the web app talks to the control plane through the API gateway and sees the app it is building through the Preview proxy, the line on the left. The customer's own systems call the project's agents through the same gateway. Coding agents arrive through the MCP server, and GitHub through the GitHub App, whose pull requests go to the Test service as checks. Every record belongs to a workspace, one per customer, which sets roles, the approval rule and where apps run. The Run orchestrator drives sandboxes through the Sandbox manager, and every model call, from the harness, sandboxes or deployed apps, goes through the Model gateway, which also runs model comparisons. The Blueprint library holds versioned blueprints that roll out into customers' projects. End users reach deployed apps through App ingress, the outer line on the right; the Deploy service releases tested builds along the inner line, into Architect's cloud or the customer's own account. The Test service, highlighted, is the gate in front of every release.
 
 **Service catalogue.** Every box in the diagram, what it is responsible for, what we'd build it with, and why.
 
@@ -33,13 +33,14 @@ How to read it: the web app talks to the control plane through the API gateway a
 | MCP server | Lets coding agents use Architect | Remote MCP over HTTP, OAuth 2.1 | Follows the MCP authorization spec; same API as the web app, no side door |
 | GitHub App | Two-way repo sync, imports, test results on pull requests | GitHub App with webhooks and the Checks API | Fine-grained, per-repo, short-lived tokens |
 | App ingress | Routes end users to deployed apps; custom domains | Envoy with automated TLS | Separate from previews, so production sessions are isolated |
-| Auth and orgs | Sign-in, organisations, members, the four permissions, approval policy | OIDC and SAML, SCIM | Enterprises sign in with their own identity provider |
+| Workspaces and auth | Sign-in, workspaces (one per customer), members, the four permissions, approval rule, deploy target | OIDC and SAML, SCIM | Enterprises sign in with their own identity provider |
 | Project service | Projects, versions, environments, the link to each repo | TypeScript service on Postgres | The system of record for what exists and which version is where |
 | Test service | Golden tests: exact checks, judge, traces, gating verdict | Our own service running in test sandboxes | The core differentiator; must be impossible to skip |
 | Deploy service | Freeze, build, stage, gate, release, watch, roll back | Temporal workflow | A deploy can wait days for approval and must never half-finish |
 | Metering and audit | Cost estimates and receipts; the append-only record of every action | Event consumers writing to Postgres | Estimates come from real history; audit answers "who changed what" |
 | Run orchestrator | Starts, pauses and resumes every agent run | Temporal | Durable execution for long runs and human waits |
 | Inbox | Review requests, invites, alerts, failing tests, across projects | Event consumer, email and in-app | One place for "what needs me" |
+| Blueprint library | Versioned blueprints: publishing from the source project, roll-outs into customer projects | Template repos in the Git store, a tag per version; roll-outs as Temporal workflows | A roll-out is a merge plus a test run per customer, so it must survive restarts |
 | Harness workers | The Planner, Builder, Verifier and Fixer loops | Python workers on Temporal | Scale independently of the web tier |
 | Sandbox manager | Warm pool, create, pause, resume, archive; one API over any provider | Our own adapter over E2B, Modal ready | Avoids single-vendor lock-in |
 | Sandbox fleet | Runs generated code: dev server, builds, commands | E2B Firecracker microVMs | Own kernel per project, resume with state, BYOC |
