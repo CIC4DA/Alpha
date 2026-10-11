@@ -89,7 +89,7 @@ export function TopBar({
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-surface px-4">
-      <div className="flex min-w-[7rem] items-center gap-2.5 sm:min-w-0">
+      <div className="flex min-w-[7rem] items-center gap-2.5">
         {editing ? (
           <input
             autoFocus
@@ -117,8 +117,22 @@ export function TopBar({
         </span>
       </div>
 
+      {/* Mid-width screens: the stages as a compact picker, so the name, status and actions keep their room. */}
+      <select
+        aria-label="Stage"
+        value={viewing === "live" ? "ship" : viewing}
+        onChange={(e) => onViewStage(e.target.value as Stage)}
+        className="hidden h-8 shrink-0 rounded-md border border-line-strong bg-surface px-2 text-[13px] md:block xl:hidden"
+      >
+        {STAGES.map((s, i) => (
+          <option key={s.id} value={s.id} disabled={i > reached}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+
       {/* The stepper: reached stages can be reopened; later ones are locked until earlier ones finish. */}
-      <nav aria-label="Stages" className="mx-auto hidden items-center md:flex">
+      <nav aria-label="Stages" className="mx-auto hidden items-center xl:flex">
         {STAGES.map((s, i) => {
           const done = reached > i;
           const current = viewing === s.id || (viewing === "live" && s.id === "ship");
@@ -142,7 +156,7 @@ export function TopBar({
         })}
       </nav>
 
-      <div className="ml-auto flex items-center gap-2 md:ml-0">
+      <div className="ml-auto flex items-center gap-2 xl:ml-0">
         <div className="hidden rounded-full border border-line-strong p-0.5 text-[12px] sm:flex" role="group" aria-label="View">
           {(["builder", "developer", "approver"] as View[]).map((v) => (
             <button

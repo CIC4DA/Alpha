@@ -100,6 +100,10 @@ export default function HomePage() {
         : {};
       await saveJourney(p.id, { ...fromBp, chatMode: mode, designSystem: design, browserTest });
       router.push(`/p/${p.id}`);
+      // Home stays mounted in the background, so leave it ready for the next project.
+      setBusy(false);
+      setPrompt("");
+      setBlueprint(null);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -133,7 +137,7 @@ export default function HomePage() {
               value={org?.id ?? ""}
               disabled={!org}
               onChange={(id) => switchOrg(id)}
-              options={orgs.map((o) => ({ id: o.id, label: o.name, detail: o.kind === "customer" ? "Customer workspace" : "Your own workspace" }))}
+              options={(orgs.length ? orgs : org ? [org] : []).map((o) => ({ id: o.id, label: o.name, detail: o.kind === "customer" ? "Customer workspace" : "Your own workspace" }))}
               footer={
                 <Link href="/settings" className="text-blue hover:underline">
                   New customer workspace, or invite people
