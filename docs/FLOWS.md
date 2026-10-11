@@ -197,7 +197,7 @@ Twenty-five screens cover every feature the assignment lists and every P0 in the
 | --- | --- | --- | --- | --- | --- |
 | 1 | Sign in and sign up | Get in fast | Google, GitHub, email link; create or join an organisation | Authentication | Real |
 | 2 | Onboarding | Set sensible defaults | Two questions: what you do, what you want to build first; sets the default view | Authentication | Clickable flow |
-| 3 | Home | Start or resume work | Composer with quick settings: a business user picks chat mode, look, checks and sign-off; an FDE picks the customer workspace, where it runs, sign-off and a blueprint; ideas; recent projects with status; what needs you | Homepage | Real |
+| 3 | Home | Start or resume work | One view for every role: the workspace as a sentence above the composer (customer, where apps run, who signs off); composer with chat mode, look and checks; start from a blueprint, template or repository; recent projects with status; what needs you | Homepage | Real |
 | 4 | Projects | Find any project | Cards with name, description, status, last edit, spend, test status; filter and search | Homepage | Real |
 | 5 | Inbox | What needs me, across projects | Reviews awaiting me, invites, alerts, failing tests | Approver | Clickable flow |
 | 6 | Project: Plan | Agree what to build and what it costs | Chat; one question at a time with a recommended default; plan summary; Suggested scope toggles; price on the Build button; mockup | Chat window | Clickable flow |

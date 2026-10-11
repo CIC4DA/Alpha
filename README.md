@@ -42,7 +42,7 @@ Also in the prototype:
 - **For FDEs**: one workspace per customer, each with its own members, approval rule and deploy target (Architect cloud or the customer's own cloud account). When the app is live, hand it over by inviting the customer's builder and approver (Architect writes HANDOVER.md), and save it as a blueprint to start the next customer from.
 - **Agents page**: every agent in the workspace with its model, runs, cost and failures, editable in place. Studio and GitAgent live inside Architect; nobody has to go to either.
 - **Workspace settings**: require a separate approver (maker-checker), choose where apps run, invite people by role. With no setup, everyone can do everything.
-- **Home**: one composer with quick settings for whoever is starting. A business user picks the chat mode, the look (design system), the checks and who signs off; an FDE picks the customer workspace, where the app runs, who signs off and a blueprint to start from. Ideas and recent projects sit underneath.
+- **Home**: one view for everyone. A line above the composer shows the workspace as a sentence (which customer, where its apps run, who signs off), each part changeable in place; the composer sets the chat mode, look and checks for the new project, and the + menu starts from a blueprint, a template or a GitHub repository. Blueprints, ideas and recent projects sit underneath.
 - **Navigation**: a persistent rail with recent projects, projects named from the prompt with a description, statuses, an Inbox for everything waiting on you, and import from GitHub.
 - **Explore and Help**: ideas by role, a prompt library, a marketplace of community apps to remix, templates, design systems and tutorials in one Explore page; a Help page and a support chat that answers from the help articles. Marketplace listings, status and the support hand-over are sample data.
 - **Pull requests from your editor**: a developer works in Cursor, Claude Code or Codex and opens a pull request. Architect runs the golden tests, on outcome and reason, and the plan's rules on the branch; merge is blocked while anything fails, and the failures go back to the coding agent as a review comment. A merge becomes a version, reviewed like any other.
@@ -119,7 +119,7 @@ The token is your own sign-in and lasts about an hour. Then ask your agent, for 
 
 ```
 src/app/login              Sign-in
-src/app/(app)/home         Composer with quick settings for business users and FDEs, recent projects
+src/app/(app)/home         Composer with workspace and project quick settings, recent projects
 src/app/(app)/p/[id]       The project workspace: stages, chat, three views
 src/app/(app)/inbox        Reviews, failing tests, unfinished setup
 src/app/(app)/settings     Workspace settings: approval rule, where apps run, members
