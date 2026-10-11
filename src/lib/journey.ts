@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadJourney, saveJourney } from "./store";
 
+export type PlanItem = { name: string; detail: string };
+export type PlanEdit = { summary: string; screens: PlanItem[]; agents: PlanItem[]; rules: string[] };
+
 /** Per-project journey state for the scripted stages. The stage and status themselves live in the database. */
 export type Journey = {
   answers: Record<string, string[]>;
@@ -18,6 +21,7 @@ export type Journey = {
   fromBlueprint?: string; // "Loan Triage Desk, built for Kestrel Lending"
   handover?: { emails: string[]; at: string };
   blueprintSaved?: boolean;
+  planEdit?: PlanEdit; // the builder's own edits to the plan; replaces the generated one
   reviewRequestedBy?: string; // user id; with a separate approver required, this person can't approve
   chat: { from: "user" | "architect"; text: string; at: string }[];
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getOrg, getProject, invite, isDemo, saveBlueprint, updateProject, type Org, type Project, type Stage } from "@/lib/store";
@@ -54,6 +54,9 @@ officer overrides a recommendation: the override becomes the expected answer.
 `;
 }
 
+const CHAT_DEFAULT = 380;
+const clampChat = (w: number) => Math.round(Math.min(Math.max(w, 300), 760));
+
 export default function WorkspacePage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -67,6 +70,36 @@ export default function WorkspacePage() {
   const [devFile, setDevFile] = useState<string | undefined>();
   const [pane, setPane] = useState<"chat" | "canvas">("chat"); // narrow screens show one at a time
   const [openAgent, setOpenAgent] = useState<AgentId | null>(null); // from the Agents page
+  const [chatW, setChatW] = useState(CHAT_DEFAULT); // wide screens: the person can drag the chat wider
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    try {
+      const saved = Number(localStorage.getItem("alpha.chat-width"));
+      if (saved) setChatW(clampChat(saved));
+    } catch {}
+  }, []);
+  const setChat = (w: number) => {
+    const v = clampChat(w);
+    setChatW(v);
+    try {
+      localStorage.setItem("alpha.chat-width", String(v));
+    } catch {}
+  };
+  const startDrag = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const left = body.current?.getBoundingClientRect().left ?? 0;
+    const move = (ev: PointerEvent) => setChat(ev.clientX - left);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
   useEffect(() => {
     getProject(id)
@@ -233,6 +266,12 @@ export default function WorkspacePage() {
             prompt={project.prompt}
             j={j}
             done={stageIndex(project.stage) > 0}
+            onSavePlan={(plan) =>
+              update((p) => ({
+                planEdit: plan,
+                chat: [...p.chat, log(`Plan updated: ${plan.screens.length} screens, ${plan.agents.length} agents and ${plan.rules.length} rules, each rule a test. The estimate on the plan reflects the change.`)],
+              }))
+            }
             onToggleSuggested={(sid) => update((p) => ({ suggestedOn: p.suggestedOn.includes(sid) ? p.suggestedOn.filter((x) => x !== sid) : [...p.suggestedOn, sid] }))}
             onContinue={() => goStage("connect")}
             onOpenSpec={() => {
@@ -354,8 +393,8 @@ export default function WorkspacePage() {
           ))}
         </div>
       </div>
-      <div className="flex min-h-0 flex-1">
-        <div className={`${pane === "canvas" ? "hidden" : "flex"} w-full min-w-0 lg:flex lg:w-auto`}>
+      <div ref={body} className="flex min-h-0 flex-1" style={{ "--chat-w": `${chatW}px` } as React.CSSProperties}>
+        <div className={`${pane === "canvas" ? "hidden" : "flex"} w-full min-w-0 shrink-0 lg:flex lg:w-[var(--chat-w)]`}>
           <ChatPane
             items={items}
             todos={todos}
@@ -378,6 +417,25 @@ export default function WorkspacePage() {
             onSend={say}
             placeholder={view === "developer" ? "Ask about the code, or ask for a change" : view === "approver" ? "Comment for the builder" : "Ask for a change, or ask a question"}
           />
+        </div>
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize chat"
+          aria-valuenow={chatW}
+          aria-valuemin={300}
+          aria-valuemax={760}
+          tabIndex={0}
+          title="Drag to resize the chat. Double-click to reset."
+          onPointerDown={startDrag}
+          onDoubleClick={() => setChat(CHAT_DEFAULT)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") setChat(chatW - 24);
+            if (e.key === "ArrowRight") setChat(chatW + 24);
+          }}
+          className="group relative -ml-[3px] hidden w-[6px] shrink-0 cursor-col-resize lg:block"
+        >
+          <span className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent transition-colors group-hover:bg-blue/50 group-focus-visible:bg-blue" />
         </div>
         <section className={`${pane === "chat" ? "hidden" : "block"} min-w-0 flex-1 overflow-y-auto bg-paper lg:block`}>{canvas()}</section>
       </div>
