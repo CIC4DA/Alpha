@@ -12,7 +12,31 @@ This repo is the clickable prototype, the architecture for building it for real,
 | Flows and screens | [docs/FLOWS.md](docs/FLOWS.md): information architecture, each role's journey, every screen |
 | Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [the diagram](docs/architecture-diagram.png) |
 | Discovery | [docs/DISCOVERY.md](docs/DISCOVERY.md): hands-on run of today's Architect and Lovable on the same loan-triage app, competitor teardown, hypotheses |
-| Prototype | This Next.js app. Run it locally (below) or open the deployed link |
+| Prototype | [alpha-architect-2.vercel.app](https://alpha-architect-2.vercel.app), or run it locally (below) |
+
+## Try it
+
+Open [alpha-architect-2.vercel.app](https://alpha-architect-2.vercel.app) and sign in with the shared test account:
+
+| | |
+| --- | --- |
+| Email | `test@test.com` |
+| Password | `test12345` |
+
+The account already holds a workspace of its own and two customer workspaces, so every role and stage has something to look at. A suggested route, about ten minutes:
+
+1. **Home.** One view for everyone. The line above the composer is the workspace (which customer, where its apps run, who signs off), each part changeable in place; the composer sets the chat mode, look and checks for the next project.
+2. **Loan Triage Desk** (under Recent projects). A live app that went through the whole journey. In the chat, scroll the questions, plan, connect, build, the failed test and its free fix, deploy, and version 2 made from a chat message. Use the stage steps at the top to reopen any stage.
+3. **Switch views** at the top right:
+   - **Developer:** files you can edit, Debug a failed run, Terminal (try `help`), Environments, API (press **Send request**: a real endpoint answers), and **Your coding agent** (press **Put my access token in**, then **Test the connection**: a real MCP server answers).
+   - **Approver:** what changed, the checklist with evidence, test results.
+4. **Agents** in the rail. Every agent in the workspace with runs, cost and failures, editable in place. **Open in Loan Triage Desk** takes you to that agent in its project, where **Compare models on the golden tests** runs its cases on several models side by side.
+5. **Blueprints** in the rail. Loan Triage Desk is saved as a blueprint at version 2. Kestrel Lending is up to date; Northwind Credit Union is one version behind, so you can press **Roll out version 2**.
+6. **Switch workspace** (top of the rail) to **Kestrel Lending**, a customer that requires a separate approver and runs apps in its own AWS account. Kestrel Triage Desk is live and handed over to the customer's people; see **Workspace settings** for the rule, deploy target and members.
+7. **Switch to Northwind Credit Union.** Northwind Triage Desk, started from the blueprint, is waiting for approval. The test account requested that review, so it can't approve it: that is the separate-approver rule working.
+8. **Start your own.** On Home, pick **Loan application triage** and press **Plan it** to run the journey from the start. Any other prompt gets a real project and plan; the rest of its journey follows the loan-triage example.
+
+Everyone shares this account, so you may see other reviewers' projects. To try it alone, choose **Explore without an account** on the sign-in page: demo mode keeps everything in your browser.
 
 ![Architecture](docs/architecture-diagram.png)
 
