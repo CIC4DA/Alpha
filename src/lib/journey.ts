@@ -23,7 +23,18 @@ export type Journey = {
   blueprintSaved?: boolean;
   planEdit?: PlanEdit; // the builder's own edits to the plan; replaces the generated one
   reviewRequestedBy?: string; // user id; with a separate approver required, this person can't approve
-  chat: { from: "user" | "architect"; text: string; at: string; files?: string[] }[];
+  chat: {
+    from: "user" | "architect";
+    text: string;
+    at: string;
+    files?: string[];
+    commit?: { sha: string; message: string };
+    proposal?: { id: string; title: string; changes: string[]; status: "pending" | "applied" | "discarded" };
+  }[];
+  mcpServers?: { name: string; url: string }[];
+  tools?: { name: string; detail: string }[];
+  browserTest?: boolean; // click through every screen in a real browser after each build
+  currentSha?: string; // set when the builder reverts to an earlier version
 };
 
 const empty: Journey = {

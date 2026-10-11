@@ -1,12 +1,25 @@
 "use client";
 
-import { Check, Share2, Rocket } from "lucide-react";
-import { useState } from "react";
+import { Check, Share2, Rocket, MoreVertical, Pencil, Copy, FlaskConical, RefreshCw, Download, KeyRound, FolderTree, CopyPlus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { Project, Stage } from "@/lib/store";
 import { StatusBadge } from "../ui";
 import { CreditsPill } from "../credits";
 
 export type View = "builder" | "developer" | "approver";
+
+/** Project-level actions from the More menu, matching today's Architect. */
+export type ProjectActions = {
+  rename: (name: string) => void;
+  browserTest: boolean;
+  setBrowserTest: (on: boolean) => void;
+  refresh: () => void;
+  download: () => void;
+  openEnv: () => void;
+  openFiles: () => void;
+  duplicate: () => void;
+  remove: () => void;
+};
 export const STAGES: { id: Exclude<Stage, "live">; label: string }[] = [
   { id: "plan", label: "Plan" },
   { id: "connect", label: "Connect" },
@@ -25,6 +38,7 @@ export function TopBar({
   onView,
   shipReady,
   onShip,
+  actions,
 }: {
   project: Project;
   viewing: Stage;
@@ -33,15 +47,74 @@ export function TopBar({
   onView: (v: View) => void;
   shipReady: boolean;
   onShip: () => void;
+  actions: ProjectActions;
 }) {
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(project.name);
+  const [menu, setMenu] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [idCopied, setIdCopied] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) {
+        setMenu(false);
+        setConfirmDelete(false);
+      }
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [menu]);
+  const saveName = () => {
+    setEditing(false);
+    const v = name.trim();
+    if (v && v !== project.name) actions.rename(v);
+    else setName(project.name);
+  };
+  const run = (fn: () => void) => {
+    setMenu(false);
+    fn();
+  };
+  const item = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-paper";
   const reached = stageIndex(project.stage);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 border-b border-line bg-surface px-4">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <h1 className="truncate font-semibold">{project.name}</h1>
-        <StatusBadge status={project.status} />
+      <div className="flex min-w-[7rem] items-center gap-2.5 sm:min-w-0">
+        {editing ? (
+          <input
+            autoFocus
+            aria-label="Project name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={saveName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveName();
+              if (e.key === "Escape") {
+                setName(project.name);
+                setEditing(false);
+              }
+            }}
+            className="h-8 w-56 rounded-md border border-blue px-2 font-semibold outline-none"
+          />
+        ) : (
+          <button onClick={() => setEditing(true)} title="Rename" className="group flex min-w-0 items-center gap-1.5">
+            <h1 className="truncate font-semibold">{project.name}</h1>
+            <Pencil size={13} className="shrink-0 text-ink-3 opacity-0 group-hover:opacity-100" />
+          </button>
+        )}
+        <span className="hidden shrink-0 sm:inline-flex">
+          <StatusBadge status={project.status} />
+        </span>
       </div>
 
       {/* The stepper: reached stages can be reopened; later ones are locked until earlier ones finish. */}
@@ -82,7 +155,9 @@ export function TopBar({
             </button>
           ))}
         </div>
-        <CreditsPill />
+        <div className="hidden sm:block">
+          <CreditsPill />
+        </div>
         <button
           onClick={() => {
             navigator.clipboard?.writeText(window.location.href);
@@ -101,6 +176,59 @@ export function TopBar({
         >
           <Rocket size={14} /> Ship
         </button>
+        <div ref={menuRef} className="relative">
+          <button onClick={() => setMenu((m) => !m)} aria-label="More actions" aria-expanded={menu} className="flex h-8 w-8 items-center justify-center rounded-md text-ink-2 hover:bg-paper hover:text-ink">
+            <MoreVertical size={16} />
+          </button>
+          {menu && (
+            <div role="menu" className="absolute right-0 top-full z-40 mt-1 w-64 rounded-lg border border-line-strong bg-surface p-1 shadow-[0_12px_32px_-12px_rgba(24,32,46,0.35)]">
+              <button
+                role="menuitem"
+                onClick={() => {
+                  navigator.clipboard?.writeText(project.id);
+                  setIdCopied(true);
+                  setTimeout(() => setIdCopied(false), 1400);
+                }}
+                className={item}
+              >
+                <Copy size={14} className="text-ink-3" />
+                <span className="flex-1">{idCopied ? "Project ID copied" : "Copy project ID"}</span>
+                <span className="font-mono text-[11px] text-ink-3">{project.id.slice(0, 8)}</span>
+              </button>
+              <button role="menuitem" onClick={() => run(() => setEditing(true))} className={item}>
+                <Pencil size={14} className="text-ink-3" /> Rename
+              </button>
+              <button role="menuitemcheckbox" aria-checked={actions.browserTest} onClick={() => run(() => actions.setBrowserTest(!actions.browserTest))} className={item}>
+                <FlaskConical size={14} className="text-ink-3" /> <span className="flex-1">Feature testing</span>
+                <span className="text-[12px] text-ink-3">{actions.browserTest ? "On" : "Off"}</span>
+              </button>
+              <button role="menuitem" onClick={() => run(actions.refresh)} className={item}>
+                <RefreshCw size={14} className="text-ink-3" /> Refresh preview
+              </button>
+              <div className="my-1 border-t border-line" />
+              <button role="menuitem" onClick={() => run(actions.download)} className={item}>
+                <Download size={14} className="text-ink-3" /> Download code
+              </button>
+              <button role="menuitem" onClick={() => run(actions.openEnv)} className={item}>
+                <KeyRound size={14} className="text-ink-3" /> Environment variables
+              </button>
+              <button role="menuitem" onClick={() => run(actions.openFiles)} className={item}>
+                <FolderTree size={14} className="text-ink-3" /> View file tree
+              </button>
+              <button role="menuitem" onClick={() => run(actions.duplicate)} className={item}>
+                <CopyPlus size={14} className="text-ink-3" /> Duplicate project
+              </button>
+              <div className="my-1 border-t border-line" />
+              <button
+                role="menuitem"
+                onClick={() => (confirmDelete ? run(actions.remove) : setConfirmDelete(true))}
+                className={`${item} text-red hover:bg-red-wash`}
+              >
+                <Trash2 size={14} /> {confirmDelete ? "Click again to delete for good" : "Delete project"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

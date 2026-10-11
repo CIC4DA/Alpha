@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { zipSync, strToU8 } from "fflate";
 import Link from "next/link";
-import { getOrg, getProject, invite, isDemo, saveBlueprint, updateProject, type Org, type Project, type Stage } from "@/lib/store";
+import { createProject, deleteProject, getOrg, getProject, invite, isDemo, saveBlueprint, saveJourney, updateProject, type Org, type Project, type Stage } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
-import { useJourney } from "@/lib/journey";
-import { BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
-import { TopBar, STAGES, stageIndex, type View } from "@/components/workspace/topbar";
+import { useJourney, type Journey } from "@/lib/journey";
+import { FILES, BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
+import { TopBar, STAGES, stageIndex, type View, type ProjectActions } from "@/components/workspace/topbar";
 import { ChatPane, type ChatItem, type ChatMode, type Todo } from "@/components/workspace/chat";
 import { PlanCanvas } from "@/components/workspace/plan";
 import { ConnectCanvas } from "@/components/workspace/connect";
@@ -54,6 +55,32 @@ officer overrides a recommendation: the override becomes the expected answer.
 `;
 }
 
+const shortSha = () => Math.random().toString(16).slice(2, 9);
+
+function changeSteps(built: boolean) {
+  return built
+    ? ["Update the plan with this change", "Rebuild only the screens and agents it touches", "Run all 6 golden checks; keep the change only if they pass", `About $${CHANGE_COST.toFixed(2)}`]
+    : ["Add it to the plan", "Include it in the first build, at no extra cost now"];
+}
+
+/** Auto mode, or an applied proposal: a built app gets a new version and commit; before the build it joins the plan. */
+function applyChange(p: Journey, title: string, now: string): { patch: Partial<Journey>; chat: Journey["chat"] } {
+  if (p.buildDone < BUILD_STEPS.length)
+    return { patch: {}, chat: [{ from: "architect", text: `Added to the plan: "${title}". It will be part of the first build.`, at: now }] };
+  const v = p.version + 1;
+  return {
+    patch: { version: v, currentSha: undefined },
+    chat: [
+      {
+        from: "architect",
+        text: `Done in version ${v}. I rebuilt only what "${title}" touches and ran all 6 golden checks; they pass. It cost $${CHANGE_COST.toFixed(2)}. In this prototype the change is recorded but the preview stays as built.`,
+        at: now,
+        commit: { sha: shortSha(), message: title.length > 60 ? `${title.slice(0, 57)}...` : title },
+      },
+    ],
+  };
+}
+
 const CHAT_DEFAULT = 380;
 const clampChat = (w: number) => Math.round(Math.min(Math.max(w, 300), 760));
 
@@ -70,7 +97,9 @@ export default function WorkspacePage() {
   const [devFile, setDevFile] = useState<string | undefined>();
   const [pane, setPane] = useState<"chat" | "canvas">("chat"); // narrow screens show one at a time
   const [openAgent, setOpenAgent] = useState<AgentId | null>(null); // from the Agents page
-  const [chatMode, setChatMode] = useState<ChatMode>("build");
+  const [chatMode, setChatMode] = useState<ChatMode>("auto");
+  const [refreshKey, setRefreshKey] = useState(0); // remounts the canvas, like Architect's refresh
+  const router = useRouter();
   const [chatW, setChatW] = useState(CHAT_DEFAULT); // wide screens: the person can drag the chat wider
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -173,20 +202,33 @@ export default function WorkspacePage() {
           ? "Building with demo data. The preview will say so, and production stays locked until real data is connected."
           : "Building now. You can watch the preview fill in, or leave: the build carries on.",
       });
-      BUILD_STEPS.forEach((b, i) => out.push({ kind: "step", text: b.label, state: i < j.buildDone ? "done" : i === j.buildDone ? "running" : "waiting" }));
+      BUILD_STEPS.forEach((b, i) => out.push({ kind: "step", text: b.label, detail: b.dev, state: i < j.buildDone ? "done" : i === j.buildDone ? "running" : "waiting" }));
+      if (j.browserTest && j.buildDone >= BUILD_STEPS.length)
+        out.push({ kind: "step", text: "Clicking through every screen in a real browser", detail: "open /login, /applications, /applications/KCL-0103/review, /decision\n  4 of 4 screens loaded, 0 console errors", state: "done" });
     }
     if (j.buildDone >= BUILD_STEPS.length)
       out.push({
         kind: "architect",
         text: "Built, and every screen checked end to end. One type error in the review screen was fixed on the first try, at no cost. Next: test it on your sample applications.",
       });
+    if (j.buildDone >= BUILD_STEPS.length) out.push({ kind: "commit", sha: "a3f9c21", message: "First build: 4 screens, 3 agents, database", current: false });
     if (j.testRun !== "none") {
       const bw = GOLDEN.find((g) => g.id === "brightwell")!;
       out.push({ kind: "architect", text: `5 of 6 checks pass. ${bw.firstRun.note} Fixing it is free.` });
     }
     if (j.testRun === "fixed")
       out.push({ kind: "architect", text: "Fixed. The Policy agent now treats two different figures for the same fact as a conflict under clause 5.2 before anything else. All 6 checks pass." });
-    for (const m of j.chat) out.push(m.from === "user" ? { kind: "user", text: m.text, files: m.files } : { kind: "architect", text: m.text });
+    if (j.testRun === "fixed") out.push({ kind: "commit", sha: "b7e1d04", message: "Fix: conflicting figures go to Manual Review (5.2)", current: false });
+    for (const m of j.chat) {
+      if (m.from === "user") out.push({ kind: "user", text: m.text, files: m.files });
+      else if (m.text) out.push({ kind: "architect", text: m.text });
+      if (m.proposal) out.push({ kind: "proposal", proposal: m.proposal });
+      if (m.commit) out.push({ kind: "commit", sha: m.commit.sha, message: m.commit.message, current: false });
+    }
+    // The newest commit is the current version unless the builder reverted to an earlier one.
+    const commits = out.filter((x): x is Extract<ChatItem, { kind: "commit" }> => x.kind === "commit");
+    const current = j.currentSha ?? commits[commits.length - 1]?.sha;
+    for (const c of commits) c.current = c.sha === current;
     if (project.stage === "live") out.push({ kind: "architect", text: `Live at ${liveHost(project, org)}. Total spent: $${project.spendUsd.toFixed(2)}, inside the estimate.` });
     return out;
   }, [project, j, question, org]);
@@ -221,7 +263,9 @@ export default function WorkspacePage() {
 
   // Files attached in chat do real work in the journey: a policy connects as the policy, other PDFs become sample
   // applications (and so golden tests). The prototype records file names only, never contents.
-  const say = (text: string, files: string[] = []) =>
+  const say = (text: string, files: string[] = []) => {
+    const built = j.buildDone >= BUILD_STEPS.length;
+    const willApply = Boolean(text && !files.length && chatMode === "auto" && built);
     update((p) => {
       const now = new Date().toISOString();
       const connected = { ...p.connected };
@@ -241,19 +285,109 @@ export default function WorkspacePage() {
       }
       if (others.length) notes.push(`I've saved ${others.join(", ")} with the project. In the full product I'd read ${others.length === 1 ? "it" : "them"} and suggest changes to the plan.`);
       if (files.length) notes.push("Everything attached is listed in Connect.");
-      const reply =
-        text && !files.length
-          ? chatMode === "ask"
-            ? "Ask mode answers without changing the project, and it's free. In the full product I'd answer from the plan, the code, the traces and the test results. In this prototype answers are scripted. Switch to Build when you want a change made."
-            : view === "developer"
-              ? "In the full product this change becomes a new version: I'd show you the diff, run the golden tests on it, and apply it only if they pass. In this prototype code changes are scripted, so it's saved here but not applied."
-              : "In the full product this becomes a new version: I'd update the plan, rebuild only what's affected and re-run the tests before you see it. In this prototype the build is scripted, so your message is saved but not applied."
-          : "";
-      return {
-        connected,
-        chat: [...p.chat, { from: "user", text, at: now, files }, { from: "architect", text: [notes.join(" "), reply].filter(Boolean).join("\n\n"), at: now }],
-      };
+
+      // What a typed message does depends on the mode: Plan proposes, Manual asks first, Auto makes the change.
+      let reply = "";
+      let extra: Journey["chat"] = [];
+      let patch: Partial<Journey> = {};
+      if (text && !files.length) {
+        if (chatMode === "plan")
+          reply = `Here's what I'd do: ${built ? "update the plan, rebuild only the screens and agents this touches, and re-run all 6 golden checks" : "add this to the plan so it's part of the first build"}. Nothing has changed. Switch to Manual to review the change before it's made, or to Auto to have it made. Planning is free.`;
+        else if (chatMode === "manual")
+          extra = [{ from: "architect", text: "Here's the change. Nothing is applied until you say so.", at: now, proposal: { id: crypto.randomUUID(), title: text, changes: changeSteps(built), status: "pending" } }];
+        else {
+          const applied = applyChange(p, text, now);
+          patch = applied.patch;
+          extra = applied.chat;
+        }
+      }
+      const note = [notes.join(" "), reply].filter(Boolean).join("\n\n");
+      return { ...patch, connected, chat: [...p.chat, { from: "user", text, at: now, files }, ...(note ? [{ from: "architect" as const, text: note, at: now }] : []), ...extra] };
     });
+    if (willApply) persist({ spendUsd: project.spendUsd + CHANGE_COST });
+  };
+
+  // Manual mode: the builder applies or discards a proposed change.
+  const decide = (id: string, apply: boolean) => {
+    const prop = j.chat.find((m) => m.proposal?.id === id)?.proposal;
+    if (!prop || prop.status !== "pending") return;
+    const built = j.buildDone >= BUILD_STEPS.length;
+    update((p) => {
+      const now = new Date().toISOString();
+      const chat = p.chat.map((m) => (m.proposal?.id === id ? { ...m, proposal: { ...m.proposal, status: apply ? ("applied" as const) : ("discarded" as const) } } : m));
+      if (!apply) return { chat: [...chat, log("Discarded. Nothing changed.")] };
+      const applied = applyChange({ ...p, chat }, prop.title, now);
+      return { ...applied.patch, chat: [...chat, ...applied.chat] };
+    });
+    if (apply && built) persist({ spendUsd: project.spendUsd + CHANGE_COST });
+  };
+
+  const revert = (sha: string) =>
+    update((p) => ({
+      currentSha: sha,
+      chat: [...p.chat, log(`Reverted to ${sha}. The preview and the golden tests now run on that version. Later versions are kept, so you can return to any of them.`)],
+    }));
+
+  const addMcp = (srv: { name: string; url: string }) =>
+    update((p) => ({
+      mcpServers: [...(p.mcpServers ?? []), srv],
+      chat: [...p.chat, log(`Added the ${srv.name} MCP server. Its tools are available to this project's agents now; you'll find it under Agents, MCP servers and tools.`)],
+    }));
+
+  const browserTestToggle = (on: boolean) =>
+    update((p) => ({
+      browserTest: on,
+      chat: [...p.chat, log(on ? "Browser testing is on: after each build I'll click through every screen in a real browser. It adds 2–5 minutes." : "Browser testing is off.")],
+    }));
+
+  const actions: ProjectActions | null = project && {
+    rename: (name) => persist({ name }),
+    browserTest: Boolean(j.browserTest),
+    setBrowserTest: browserTestToggle,
+    refresh: () => setRefreshKey((k) => k + 1),
+    download: () => {
+      const files: Record<string, Uint8Array> = {};
+      const extra = j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : [];
+      for (const f of [...extra, ...FILES]) files[f.path] = strToU8(f.body);
+      const blob = new Blob([zipSync(files) as BlobPart], { type: "application/zip" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "project"}.zip`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    },
+    openEnv: () => {
+      setDevTab("env");
+      setView("developer");
+      setPane("canvas");
+    },
+    openFiles: () => {
+      setDevFile(undefined);
+      setDevTab("files");
+      setView("developer");
+      setPane("canvas");
+    },
+    duplicate: async () => {
+      try {
+        const copy = await createProject(project.prompt, `${project.name} (copy)`);
+        // The copy keeps the plan, connections and build, but not reviews, handover or anything live.
+        await saveJourney(copy.id, { ...j, review: undefined, reviewNote: undefined, reviewRequestedBy: undefined, handover: undefined, blueprintSaved: undefined, chat: [...j.chat, log(`Duplicated from ${project.name}. Reviews and the live deployment aren't copied.`)] });
+        const stage = project.stage === "live" ? "ship" : project.stage;
+        await updateProject(copy.id, { stage, status: project.status === "live" ? "preview" : project.status, testsPassed: project.testsPassed, testsTotal: project.testsTotal });
+        router.push(`/p/${copy.id}`);
+      } catch (e) {
+        update((p) => ({ chat: [...p.chat, log((e as Error).message)] }));
+      }
+    },
+    remove: async () => {
+      try {
+        await deleteProject(project.id);
+        router.push("/projects");
+      } catch (e) {
+        update((p) => ({ chat: [...p.chat, log((e as Error).message)] }));
+      }
+    },
+  };
 
   const canvas = () => {
     if (view === "developer")
@@ -262,6 +396,7 @@ export default function WorkspacePage() {
           tab={devTab}
           onTab={setDevTab}
           buildDone={j.buildDone}
+          hasData={j.testRun !== "none"}
           initialFile={devFile}
           extraFiles={j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : []}
         />
@@ -324,7 +459,7 @@ export default function WorkspacePage() {
           />
         );
       case "build":
-        return <BuildCanvas done={j.buildDone} demo={j.demoData} onNext={() => goStage("test")} openAgent={openAgent} />;
+        return <BuildCanvas done={j.buildDone} demo={j.demoData} onNext={() => goStage("test")} openAgent={openAgent} ext={{ mcpServers: j.mcpServers ?? [], tools: j.tools ?? [], onAddMcp: addMcp }} />;
       case "test":
         return (
           <TestCanvas
@@ -390,9 +525,9 @@ export default function WorkspacePage() {
                 version: v,
                 chat: [
                   ...p.chat,
-                  log(
+                  { ...log(
                     `Version ${v} makes the approver's change: "${p.reviewNote}". I rebuilt only the parts it touches and re-ran all 6 checks; they pass. It cost $${CHANGE_COST.toFixed(2)}. Request review again when you're ready.`,
-                  ),
+                  ), commit: { sha: shortSha(), message: `Approver change: ${p.reviewNote}`.slice(0, 60) } },
                 ],
               }));
               persist({ spendUsd: project.spendUsd + CHANGE_COST });
@@ -404,7 +539,7 @@ export default function WorkspacePage() {
 
   return (
     <div className="flex h-screen flex-col">
-      <TopBar project={project} viewing={viewing} onViewStage={goStage} view={view} onView={setView} shipReady={testsReady} onShip={() => goStage(project.stage === "live" ? "live" : "ship")} />
+      <TopBar project={project} viewing={viewing} onViewStage={goStage} view={view} onView={setView} shipReady={testsReady} onShip={() => goStage(project.stage === "live" ? "live" : "ship")} actions={actions!} />
       <div className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-4 py-2 lg:hidden">
         <label className="sr-only" htmlFor="stage-pick">
           Stage
@@ -454,8 +589,27 @@ export default function WorkspacePage() {
             mode={chatMode}
             onMode={setChatMode}
             placeholder={
-              chatMode === "ask" ? "Ask a question; nothing will change" : view === "developer" ? "Ask for a change to the code" : view === "approver" ? "Comment for the builder" : "Ask for a change"
+              chatMode === "plan"
+                ? "Ask a question or describe a change to plan"
+                : chatMode === "manual"
+                  ? "Describe a change; you'll approve it first"
+                  : view === "developer"
+                    ? "Describe a change to the code"
+                    : view === "approver"
+                      ? "Comment for the builder"
+                      : "Describe a change"
             }
+            onRevert={revert}
+            onDecide={decide}
+            onAddMcp={addMcp}
+            onAddTool={(t) =>
+              update((p) => ({
+                tools: [...(p.tools ?? []), t],
+                chat: [...p.chat, log(`Added the custom tool "${t.name}". Assign it to an agent from the agent graph; the golden tests run before any agent uses it in production.`)],
+              }))
+            }
+            browserTest={Boolean(j.browserTest)}
+            onBrowserTest={browserTestToggle}
           />
         </div>
         <div
@@ -482,7 +636,9 @@ export default function WorkspacePage() {
             <span className="h-[3px] w-[3px] rounded-full bg-ink-3" />
           </span>
         </div>
-        <section className={`${pane === "chat" ? "hidden" : "block"} min-w-0 flex-1 overflow-y-auto bg-paper lg:block`}>{canvas()}</section>
+        <section className={`${pane === "chat" ? "hidden" : "block"} min-w-0 flex-1 overflow-y-auto bg-paper lg:block`}>
+          <div key={refreshKey} className="h-full">{canvas()}</div>
+        </section>
       </div>
     </div>
   );

@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { BUILD_STEPS } from "@/lib/fixtures";
 import { AppPreview } from "./app-preview";
-import { AgentsCanvas, type AgentId } from "./agents";
+import { AgentsCanvas, type AgentId, type Extensions } from "./agents";
 import { Button } from "../ui";
 
-export function BuildCanvas({ done, demo, onNext, openAgent = null }: { done: number; demo: boolean; onNext: () => void; openAgent?: AgentId | null }) {
+export function BuildCanvas({ done, demo, onNext, openAgent = null, ext }: { done: number; demo: boolean; onNext: () => void; openAgent?: AgentId | null; ext?: Extensions }) {
   const [tab, setTab] = useState<"preview" | "agents">(openAgent ? "agents" : "preview");
   const finished = done >= BUILD_STEPS.length;
   const revealed = BUILD_STEPS.slice(0, done).filter((s) => s.reveals !== undefined).length;
@@ -44,7 +44,7 @@ export function BuildCanvas({ done, demo, onNext, openAgent = null }: { done: nu
         </div>
       </div>
       <div className="min-h-0 flex-1 p-5">
-        {tab === "preview" ? <AppPreview revealed={revealed} demo={demo} building={!finished} /> : <AgentsCanvas initialOpen={openAgent} />}
+        {tab === "preview" ? <AppPreview revealed={revealed} demo={demo} building={!finished} /> : <AgentsCanvas initialOpen={openAgent} ext={ext} />}
       </div>
     </div>
   );

@@ -28,12 +28,34 @@ One project moves through five stages. The builder drives them; the developer an
 
 Also in the prototype:
 
-- **Developer view**: files, traces of what each agent received and returned, build logs, environment with secrets as references, GitHub sync, and an optional MCP setup for Claude Code, Codex or Cursor. The view works on its own; a coding agent is optional.
+- **Developer view**: files, the preview database (tables, rows, schema), traces of what each agent received and returned, a console with error and warning filters, environment with secrets as references, GitHub sync, and an optional MCP setup for Claude Code, Codex or Cursor. The view works on its own; a coding agent is optional.
 - **Approver view**: what changed, the checklist with evidence, test results, data access, running cost; approve or request changes.
 - **For FDEs**: one workspace per customer, each with its own members, approval rule and deploy target (Architect cloud or the customer's own cloud account). When the app is live, hand it over by inviting the customer's builder and approver (Architect writes HANDOVER.md), and save it as a blueprint to start the next customer from.
 - **Agents page**: every agent in the workspace with its model, runs, cost and failures, editable in place. Studio and GitAgent live inside Architect; nobody has to go to either.
 - **Workspace settings**: require a separate approver (maker-checker), choose where apps run, invite people by role. With no setup, everyone can do everything.
 - **Navigation**: a persistent rail with recent projects, projects named from the prompt with a description, statuses, an Inbox for everything waiting on you, and import from GitHub.
+- **Credits**: the balance sits in the top bar and the rail, as in Architect today. It opens to usage by project, a link to the full Usage page, and a quick top-up (simulated; no payment is taken).
+
+### Nothing from today's Architect is dropped
+
+Architect 2.0 adds to the product for developers and FDEs; every feature in today's project screen has a place in it.
+
+| Today's Architect | In Architect 2.0 |
+| --- | --- |
+| Plan toggle in chat | Three chat modes: **Plan** proposes and touches nothing (free), **Manual** shows each change as a proposal to apply or discard, **Auto** makes the change, runs the golden tests and keeps it only if they pass |
+| Agent steps with "N actions" | Each build step expands to the commands it ran |
+| Commit cards, "Revert to this version" | Commit cards in chat; revert to any version and the later ones are kept |
+| + menu: add assets, MCP server, custom tool | Same menu; PDFs attached in chat become the policy or sample applications |
+| Build options: test in a real browser | Same switch in chat and in the More menu (Feature testing); adds a browser check to each build |
+| Credits, Top Up, Manage Billing | Credits pill with usage by project, full Usage page and quick top-up |
+| Rename, App ID | Click the name to rename; copy the project ID from the More menu |
+| Agents graph with MCP Servers panel | Agent graph you can edit in place, with MCP servers and tools listed and addable |
+| App preview, console with All / Error / Warn / Log | Preview, and a Console in the developer view with the same filters |
+| Database tab: tables, row counts, rows and schema, search | Developer view, Database: the same, read-only on the preview branch |
+| More menu: refresh, share, download code, environment variables, duplicate, file tree, delete | Same menu; download builds a real zip, duplicate makes a real copy (reviews and the live deployment aren't copied), delete asks twice |
+| Edit Agents (Studio), GitHub, Deploy | Agents edited in place, GitHub in the developer view, Ship stage with review and receipt |
+
+Not built in the prototype: the dark theme and the support chat.
 
 ### What's real and what's scripted
 

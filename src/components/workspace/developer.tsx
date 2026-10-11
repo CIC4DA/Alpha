@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { FileCode2, Folder, GitBranch, Check, Copy, KeyRound, Terminal } from "lucide-react";
+import { FileCode2, Folder, GitBranch, Check, Copy, KeyRound, Terminal, Database as DbIcon, Lock, Search } from "lucide-react";
 import { BUILD_STEPS, FILES, TRACE } from "@/lib/fixtures";
 import { Button } from "../ui";
 
-export type DevTab = "files" | "traces" | "logs" | "env" | "github" | "agent";
+export type DevTab = "files" | "database" | "traces" | "logs" | "env" | "github" | "agent";
 const TABS: { id: DevTab; label: string }[] = [
   { id: "files", label: "Files" },
+  { id: "database", label: "Database" },
   { id: "traces", label: "Traces" },
-  { id: "logs", label: "Logs" },
+  { id: "logs", label: "Console" },
   { id: "env", label: "Environment" },
   { id: "github", label: "GitHub" },
   { id: "agent", label: "Your coding agent" },
@@ -78,13 +79,197 @@ function Traces() {
   );
 }
 
+type Level = "error" | "warn" | "log";
+const LEVELS: { id: Level | "all"; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "error", label: "Errors" },
+  { id: "warn", label: "Warnings" },
+  { id: "log", label: "Logs" },
+];
+
+/** Build output and the preview's console in one place, filterable like Architect's console. */
 function Logs({ done }: { done: number }) {
+  const [level, setLevel] = useState<Level | "all">("all");
+  const lines: { level: Level; text: string; step: string }[] = [];
+  for (const st of BUILD_STEPS.slice(0, Math.max(done, 0))) {
+    for (const t of st.dev.split("\n")) {
+      const lv: Level = /type error|error:/i.test(t) && !/errors: 0/.test(t) ? "error" : /fixer:|warn/i.test(t) ? "warn" : "log";
+      lines.push({ level: lv, text: t.trim(), step: st.label });
+    }
+  }
+  const shown = level === "all" ? lines : lines.filter((l) => l.level === level);
+  const count = (lv: Level) => lines.filter((l) => l.level === lv).length;
+  const tone = { error: "text-[#ff9b9b]", warn: "text-[#f3c969]", log: "text-[#d6dbe4]" };
   return (
-    <pre className="h-full overflow-auto bg-ink p-5 font-mono text-[12px] leading-[1.7] text-[#d6dbe4]">
-      {BUILD_STEPS.slice(0, Math.max(done, 0))
-        .map((s) => `# ${s.label}\n${s.dev}\n`)
-        .join("\n") || "No build has run yet."}
-    </pre>
+    <div className="flex h-full flex-col bg-ink">
+      <div className="flex items-center gap-1 border-b border-white/10 px-3 py-2" role="group" aria-label="Filter console">
+        {LEVELS.map((l) => (
+          <button
+            key={l.id}
+            onClick={() => setLevel(l.id)}
+            aria-pressed={level === l.id}
+            className={`rounded px-2 py-1 text-[12px] ${level === l.id ? "bg-white/15 text-white" : "text-[#9aa3b2] hover:text-white"}`}
+          >
+            {l.label}
+            {l.id !== "all" && <span className="ml-1 tabular-nums opacity-70">{count(l.id)}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-[12px] leading-[1.7]">
+        {lines.length === 0 ? (
+          <p className="text-[#9aa3b2]">No build has run yet.</p>
+        ) : shown.length === 0 ? (
+          <p className="text-[#9aa3b2]">Nothing at this level.</p>
+        ) : (
+          shown.map((l, i) => (
+            <div key={i} className={`flex gap-3 ${tone[l.level]}`}>
+              <span className="w-10 shrink-0 select-none text-[#6b7484]">{l.level}</span>
+              <span className="whitespace-pre-wrap break-all">{l.text}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+type Table = { name: string; about: string; columns: [string, string][]; rows: string[][] };
+
+function tables(hasData: boolean): Table[] {
+  const t = (iso: string) => iso;
+  return [
+    {
+      name: "applications",
+      about: "One row per uploaded application PDF",
+      columns: [["id", "text"], ["applicant", "text"], ["amount_gbp", "integer"], ["purpose", "text"], ["status", "text"], ["created_at", "timestamptz"]],
+      rows: hasData
+        ? [
+            ["KCL-0101", "Hartley Joinery Ltd", "30000", "Equipment", "decided", t("2026-10-09 10:02")],
+            ["KCL-0102", "Cole Ventures", "40000", "Crypto investment", "decided", t("2026-10-09 10:02")],
+            ["KCL-0103", "Brightwell Bakery", "65000", "Second oven and fit-out", "manual_review", t("2026-10-09 10:03")],
+          ]
+        : [],
+    },
+    {
+      name: "field_corrections",
+      about: "Facts an officer changed before deciding",
+      columns: [["id", "uuid"], ["application_id", "text"], ["field", "text"], ["extracted", "text"], ["corrected", "text"], ["by", "uuid"]],
+      rows: hasData ? [["c7e1…", "KCL-0103", "annual_income_gbp", "180000", "140000", "officer"]] : [],
+    },
+    {
+      name: "decisions",
+      about: "Outcome, cited clauses and who confirmed it",
+      columns: [["application_id", "text"], ["outcome", "text"], ["clauses", "text[]"], ["confirmed_by", "uuid"], ["email_sent", "boolean"]],
+      rows: hasData
+        ? [
+            ["KCL-0101", "Approve", "{2.1,3.1,4.1}", "officer", "false"],
+            ["KCL-0102", "Decline", "{4.2}", "officer", "false"],
+            ["KCL-0103", "Manual Review", "{5.2}", "–", "false"],
+          ]
+        : [],
+    },
+    {
+      name: "audit_events",
+      about: "Append-only trail of every agent and person action",
+      columns: [["at", "timestamptz"], ["actor", "text"], ["action", "text"], ["application_id", "text"]],
+      rows: hasData
+        ? [
+            ["2026-10-09 10:02", "extraction-agent", "extracted 9 fields", "KCL-0101"],
+            ["2026-10-09 10:02", "policy-agent", "cited 2.1, 3.1, 4.1", "KCL-0101"],
+            ["2026-10-09 10:02", "extraction-agent", "extracted 9 fields", "KCL-0102"],
+            ["2026-10-09 10:02", "policy-agent", "cited 4.2", "KCL-0102"],
+            ["2026-10-09 10:03", "extraction-agent", "found 2 income figures", "KCL-0103"],
+            ["2026-10-09 10:03", "policy-agent", "cited 5.2", "KCL-0103"],
+          ]
+        : [],
+    },
+  ];
+}
+
+/** Read-only view of the preview database, like Architect's Database tab. */
+function Database({ built, hasData }: { built: boolean; hasData: boolean }) {
+  const all = tables(hasData);
+  const [pick, setPick] = useState(all[0].name);
+  const [mode, setMode] = useState<"rows" | "schema">("rows");
+  const [q, setQ] = useState("");
+  if (!built) return <p className="p-6 text-sm text-ink-2">The database is created during the build. Nothing here yet.</p>;
+  const tbl = all.find((x) => x.name === pick)!;
+  const rows = q ? tbl.rows.filter((r) => r.some((c) => c.toLowerCase().includes(q.toLowerCase()))) : tbl.rows;
+  return (
+    <div className="flex h-full min-h-0">
+      <aside className="w-56 shrink-0 overflow-y-auto border-r border-line bg-surface p-2" aria-label="Tables">
+        <p className="px-2 pb-2 pt-1 text-[12px] text-ink-3">Preview branch, read-only</p>
+        {all.map((x) => (
+          <button
+            key={x.name}
+            onClick={() => setPick(x.name)}
+            aria-current={pick === x.name}
+            className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[13px] ${pick === x.name ? "bg-blue-wash text-blue-ink" : "hover:bg-paper"}`}
+          >
+            <span className="flex items-center gap-1.5 font-mono text-[12px]">
+              <DbIcon size={13} className="text-ink-3" /> {x.name}
+            </span>
+            <span className="tabular-nums text-[12px] text-ink-3">{x.rows.length}</span>
+          </button>
+        ))}
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-2">
+          <div className="flex rounded-md border border-line-strong p-0.5" role="group" aria-label="Table view">
+            {(["rows", "schema"] as const).map((m) => (
+              <button key={m} onClick={() => setMode(m)} aria-pressed={mode === m} className={`rounded px-2.5 py-1 text-[12px] ${mode === m ? "bg-ink text-white" : "text-ink-2"}`}>
+                {m === "rows" ? "Rows" : "Schema"}
+              </button>
+            ))}
+          </div>
+          <p className="min-w-0 flex-1 truncate text-[13px] text-ink-3">{tbl.about}</p>
+          {mode === "rows" && (
+            <label className="flex h-8 items-center gap-1.5 rounded-md border border-line-strong px-2">
+              <Search size={13} className="text-ink-3" />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search rows" aria-label="Search rows" className="w-36 bg-transparent text-[13px] outline-none" />
+            </label>
+          )}
+          <span className="flex items-center gap-1 text-[12px] text-ink-3" title="Row-level security is on">
+            <Lock size={12} /> RLS on
+          </span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          {mode === "schema" ? (
+            <table className="w-full max-w-lg rounded-lg border border-line bg-surface text-[13px]">
+              <tbody>
+                {tbl.columns.map(([c, ty]) => (
+                  <tr key={c} className="border-b border-line last:border-0">
+                    <td className="px-3 py-2 font-mono text-[12px]">{c}</td>
+                    <td className="px-3 py-2 font-mono text-[12px] text-ink-3">{ty}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : rows.length === 0 ? (
+            <p className="text-sm text-ink-2">{q ? "No rows match." : "No rows yet. Rows appear when you test the app on your sample applications."}</p>
+          ) : (
+            <table className="w-full min-w-[560px] rounded-lg border border-line bg-surface text-[13px]">
+              <thead>
+                <tr className="border-b border-line text-left text-[12px] text-ink-3">
+                  {tbl.columns.map(([c]) => (
+                    <th key={c} className="px-3 py-2 font-mono font-normal">{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} className="border-b border-line last:border-0">
+                    {r.map((c, k) => (
+                      <td key={k} className="px-3 py-2 tabular-nums">{c}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -223,17 +408,31 @@ function CodingAgent() {
   );
 }
 
-export function DeveloperCanvas({ tab, onTab, buildDone, initialFile, extraFiles = [] }: { tab: DevTab; onTab: (t: DevTab) => void; buildDone: number; initialFile?: string; extraFiles?: { path: string; body: string }[] }) {
+export function DeveloperCanvas({
+  tab,
+  onTab,
+  buildDone,
+  hasData = false,
+  initialFile,
+  extraFiles = [],
+}: {
+  tab: DevTab;
+  onTab: (t: DevTab) => void;
+  buildDone: number;
+  hasData?: boolean;
+  initialFile?: string;
+  extraFiles?: { path: string; body: string }[];
+}) {
   return (
     <div className="flex h-full flex-col">
-      <div className="flex gap-1 border-b border-line bg-surface px-4" role="tablist">
+      <div className="flex gap-1 overflow-x-auto border-b border-line bg-surface px-4" role="tablist">
         {TABS.map((t) => (
           <button
             key={t.id}
             role="tab"
             aria-selected={tab === t.id}
             onClick={() => onTab(t.id)}
-            className={`-mb-px border-b-2 px-3 py-3 text-sm ${tab === t.id ? "border-blue font-medium" : "border-transparent text-ink-3 hover:text-ink"}`}
+            className={`-mb-px shrink-0 border-b-2 px-3 py-3 text-sm ${tab === t.id ? "border-blue font-medium" : "border-transparent text-ink-3 hover:text-ink"}`}
           >
             {t.label}
           </button>
@@ -241,6 +440,7 @@ export function DeveloperCanvas({ tab, onTab, buildDone, initialFile, extraFiles
       </div>
       <div className="min-h-0 flex-1">
         {tab === "files" && <Files initial={initialFile} extra={extraFiles} />}
+        {tab === "database" && <Database built={buildDone > 1} hasData={hasData} />}
         {tab === "traces" && <Traces />}
         {tab === "logs" && <Logs done={buildDone} />}
         {tab === "env" && <Env />}

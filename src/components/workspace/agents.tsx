@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, UserCheck, Upload, Send, X, FlaskConical } from "lucide-react";
+import { Bot, UserCheck, Upload, Send, X, FlaskConical, Server, Wrench } from "lucide-react";
 import { Button } from "../ui";
 
 export type AgentId = "extraction" | "policy" | "drafting";
@@ -48,7 +48,75 @@ function Node({ icon: Icon, title, sub, human, onClick, active }: { icon: typeof
 
 const Arrow = () => <span className="h-px w-4 shrink-0 bg-ink-3" aria-hidden="true" />;
 
-export function AgentsCanvas({ initialOpen = null }: { initialOpen?: AgentId | null }) {
+export type Mcp = { name: string; url: string };
+export type CustomTool = { name: string; detail: string };
+export type Extensions = { mcpServers: Mcp[]; tools: CustomTool[]; onAddMcp: (m: Mcp) => void };
+
+/** Servers and tools the agents can call, like the MCP Servers panel on Architect's agent graph. */
+function ExtensionsPanel({ ext }: { ext: Extensions }) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const valid = name.trim() && /^https?:\/\/\S+$/.test(url.trim());
+  const built = [{ name: "Gmail", url: "Connection gmail-01, send needs officer confirmation" }];
+  return (
+    <section className="mt-8 max-w-2xl" aria-label="MCP servers and tools">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">MCP servers and tools</h3>
+        {!adding && (
+          <button onClick={() => setAdding(true)} className="text-[13px] font-medium text-blue hover:underline">
+            Add MCP server
+          </button>
+        )}
+      </div>
+      <p className="mt-0.5 text-[13px] text-ink-3">What the agents can call. Anything new runs through the golden tests before it reaches production.</p>
+      <ul className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface text-sm">
+        {[...built, ...ext.mcpServers].map((m) => (
+          <li key={m.name + m.url} className="flex items-center gap-3 px-4 py-2.5">
+            <Server size={14} className="shrink-0 text-ink-3" />
+            <span className="font-medium">{m.name}</span>
+            <span className="min-w-0 flex-1 truncate text-[13px] text-ink-3">{m.url}</span>
+            <span className="text-[12px] text-green">Connected</span>
+          </li>
+        ))}
+        {ext.tools.map((t) => (
+          <li key={t.name} className="flex items-center gap-3 px-4 py-2.5">
+            <Wrench size={14} className="shrink-0 text-ink-3" />
+            <span className="font-medium">{t.name}</span>
+            <span className="min-w-0 flex-1 truncate text-[13px] text-ink-3">{t.detail}</span>
+            <span className="text-[12px] text-ink-3">Custom tool</span>
+          </li>
+        ))}
+      </ul>
+      {adding && (
+        <form
+          className="mt-3 grid gap-2 rounded-lg border border-line bg-surface p-3 sm:grid-cols-[1fr_1.4fr_auto]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!valid) return;
+            ext.onAddMcp({ name: name.trim(), url: url.trim() });
+            setName("");
+            setUrl("");
+            setAdding(false);
+          }}
+        >
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name, e.g. Companies House" aria-label="Server name" className="h-9 rounded-md border border-line-strong px-2.5 text-sm outline-none focus:border-blue" />
+          <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://mcp.example.com/sse" aria-label="Server URL" className="h-9 rounded-md border border-line-strong px-2.5 text-sm outline-none focus:border-blue" />
+          <div className="flex gap-2">
+            <button type="submit" disabled={!valid} className="h-9 rounded-md bg-blue px-3 text-sm font-medium text-white disabled:opacity-45">
+              Add server
+            </button>
+            <button type="button" onClick={() => setAdding(false)} className="h-9 rounded-md px-2 text-sm text-ink-2 hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+export function AgentsCanvas({ initialOpen = null, ext }: { initialOpen?: AgentId | null; ext?: Extensions }) {
   const [open, setOpen] = useState<AgentId | null>(initialOpen);
   const [model, setModel] = useState<Record<AgentId, string>>({ extraction: MODELS[0], policy: MODELS[0], drafting: MODELS[0] });
   const [framework, setFramework] = useState<Record<AgentId, string>>({ extraction: FRAMEWORKS[0], policy: FRAMEWORKS[0], drafting: FRAMEWORKS[0] });
@@ -71,6 +139,7 @@ export function AgentsCanvas({ initialOpen = null }: { initialOpen?: AgentId | n
         <Arrow />
         <Node icon={Send} title="Officer sends" sub="Separate confirmation" human />
       </div>
+      {ext && <ExtensionsPanel ext={ext} />}
 
       {a && open && (
         <aside className="absolute inset-y-0 right-0 w-[380px] overflow-y-auto border-l border-line bg-surface p-5 shadow-[-8px_0_24px_-16px_rgba(24,32,46,0.25)] appear" aria-label={`${a.name} settings`}>
