@@ -100,7 +100,8 @@ export default function WorkspacePage() {
   const [devFile, setDevFile] = useState<string | undefined>();
   const [pane, setPane] = useState<"chat" | "canvas">("chat"); // narrow screens show one at a time
   const [openAgent, setOpenAgent] = useState<AgentId | null>(null); // from the Agents page
-  const [chatMode, setChatMode] = useState<ChatMode>("auto");
+  const [chatModePick, setChatMode] = useState<ChatMode | null>(null);
+  const chatMode: ChatMode = chatModePick ?? j.chatMode ?? "auto"; // Home sets the starting mode
   const [refreshKey, setRefreshKey] = useState(0); // remounts the canvas, like Architect's refresh
   const router = useRouter();
   const [chatW, setChatW] = useState(CHAT_DEFAULT); // wide screens: the person can drag the chat wider

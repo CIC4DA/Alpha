@@ -35,6 +35,8 @@ export type Journey = {
   }[];
   mcpServers?: { name: string; url: string }[];
   tools?: { name: string; detail: string }[];
+  chatMode?: "plan" | "manual" | "auto"; // chosen on Home before the project was created
+  designSystem?: string; // the look new screens are built with, from Home or Explore
   browserTest?: boolean; // click through every screen in a real browser after each build
   currentSha?: string; // set when the builder reverts to an earlier version
   github?: boolean; // repository connected

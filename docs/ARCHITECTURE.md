@@ -1,8 +1,8 @@
 # Architect 2.0 — Technical Architecture
 
-Oct 8, 2026 · @Dhruv Jain
+11 October 2026 · Dhruv Jain
 
-How we would build Architect 2.0 for real: every service, why we chose it, and what happens from the moment a user types a prompt to their app running live. It implements the [PRD](https://claude.ai/code/artifact/c21386e1-75b3-4615-899d-f3971b4158b7) and the [flows](https://claude.ai/code/artifact/78ce8376-3f1c-412e-8def-5677ed69d4f7), and starts from what we observed of today's Architect in [discovery](https://claude.ai/code/artifact/8cc1d265-e14c-41f6-bffe-d77f45d6c3de).
+How we would build Architect 2.0 for real: every service, why we chose it, and what happens from the moment a user types a prompt to their app running live. It implements the [PRD](PRD.md) and the [flows](FLOWS.md), and starts from what we observed of today's Architect in [discovery](DISCOVERY.md).
 
 ## Design principles
 
@@ -20,7 +20,7 @@ Seven decisions shape everything below. Each one exists to make "prototype to pr
 
 Architect 2.0 has five layers: the edge that people and tools connect to, a stateless control plane, a shaded zone where generated code runs, the production runtime for deployed apps, and shared data. Generated code never leaves the shaded zone except as a tested production build.
 
-![Architect 2.0 architecture: every service, five layers, the main paths](architecture-diagram.png)
+![Architecture · every service, five layers, the main paths](architecture-diagram.png)
 
 How to read it: the web app talks to the control plane through the API gateway and sees the app it is building through the Preview proxy, the line on the left. Coding agents arrive through the MCP server and GitHub through the GitHub App, both onto the same control plane. The Run orchestrator drives sandboxes through the Sandbox manager, and every model call, from the harness, sandboxes or deployed apps, goes through the Model gateway. End users reach deployed apps through App ingress, the line on the right. The Deploy service promotes tested builds into the production runtime, and the Test service, highlighted, is the gate in front of it.
 
@@ -289,7 +289,7 @@ Its tools (read the plan, list and run tests, read traces, read the checks on a 
 **Pull requests from a coding agent.** This is the loop that lets a developer stay in Cursor, Claude Code or Codex without Architect losing track of what changed.
 
 1. The developer's agent pushes a branch and opens a pull request. The GitHub App's webhook reaches the **GitHub sync service**.
-2. It checks the branch out into a test sandbox, with a database branch, and asks the **Test service** for a full run: every golden case on outcome and reason, plus the plan's rules. Rules are checked the same way as in a build: each rule the builder picked is an assertion in the golden cases ("an officer confirms every decision" fails if a decision has `confirmed_by: auto`).
+2. It checks the branch out into a test sandbox, with a database branch, and asks the **Test service** for a full run: every golden case on outcome and reason, plus the plan's rules. Each rule the builder picked is an assertion in the golden cases ("an officer confirms every decision" fails if a decision has `confirmed_by: auto`).
 3. The result is posted as a required GitHub check named *Architect golden tests*, and as a review comment listing each failing case or rule with its reason. The coding agent reads that comment, or the same result through MCP, and pushes a fix; every push re-runs the checks.
 4. In Architect's Developer view the pull request shows the diff, the per-case results and the rules. Merge is disabled while any check fails, in Architect and in GitHub, through branch protection on the required check.
 5. A merge becomes an Architect version, with a commit card in chat like a change made there. It goes through the workspace's approval rule before it can be deployed, so code written outside Architect gets the same review as code written inside it.
@@ -325,7 +325,7 @@ A developer can do the whole job inside Architect, and every tool here works on 
 | Debugger | Every run is recorded step by step: what each agent received and returned. Re-running a case after editing one agent replays the recorded inputs to that step, so only the changed agent calls a model (about a cent). Applying the change commits it, and the full golden suite runs before it can ship. |
 | Environments | Preview, staging and production each have their own settings and their own vault paths for secrets. Promotion shows the diff; secrets are never copied between environments. Production settings apply with the next approved deploy. |
 | Agents API | The **API gateway** gives each project endpoints for its whole flow and for each agent, generated from the agents' input and output schemas, with an OpenAPI spec. Keys are stored hashed and bound to one environment, so a test key can never reach production. Each call runs the version live in that environment, is rate-limited per key, traced and metered. |
-| MCP server | The same tools over MCP (below), for Claude Code, Cursor or Codex. |
+| MCP server | The same tools over MCP (see GitHub integration and MCP), for Claude Code, Cursor or Codex. |
 
 **What the prototype runs for real.** The agents API answers at `/api/v1/projects/<id>/…` from a fixed rule set that follows the lending policy clause by clause, so any HTTP client can call it; keys are not checked yet. The MCP server at `/api/mcp/<project id>` is real: a coding agent signed in with the person's own Architect token can read and write files, change an agent's rules or model, set environment settings, run the golden tests and request review, and each change appears in the project's chat as a version. Row-level security gives it exactly the access the person has. The production server would use OAuth 2.1 instead of a copied token, which expires after an hour. Edits, environments, API keys and debugger fixes are saved with the project; the terminal and the test results are simulated against that saved state.
 
@@ -501,4 +501,4 @@ We build what makes Architect different (the harness, the Test service, the prox
 - [Neon: database branching](https://neon.com/docs/introduction/branching)
 - [Lyzr: GitAgent overview](https://docs.lyzr.ai/open-source/gitagent/overview.md)
 - [Lyzr: Architect FAQs](https://docs.lyzr.ai/enterprise/architect/references/faqs)
-- Hands-on observation of architect.new's preview proxy and element picker, 7 Oct 2026, recorded in the [discovery doc](https://claude.ai/code/artifact/8cc1d265-e14c-41f6-bffe-d77f45d6c3de)
+- Hands-on observation of architect.new's preview proxy and element picker, 7 Oct 2026, recorded in the [discovery doc](DISCOVERY.md)

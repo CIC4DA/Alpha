@@ -5,6 +5,7 @@ import { FileText, Sparkles, Pencil, Plus, X } from "lucide-react";
 import { PLAN, QUESTIONS } from "@/lib/fixtures";
 import type { Journey, PlanEdit, PlanItem } from "@/lib/journey";
 import { Button } from "../ui";
+import { DESIGN_SYSTEMS } from "@/lib/explore-content";
 
 /** The plan as generated from the prompt and answers, before any edits. */
 function generatedPlan(j: Journey): PlanEdit {
@@ -246,9 +247,12 @@ export function PlanCanvas({
       </section>
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
-        <button onClick={onOpenSpec} className="flex items-center gap-1.5 text-[13px] text-blue hover:underline">
-          <FileText size={14} /> Full spec for developers, saved as PLAN.md
-        </button>
+        <div>
+          <button onClick={onOpenSpec} className="flex items-center gap-1.5 text-[13px] text-blue hover:underline">
+            <FileText size={14} /> Full spec for developers, saved as PLAN.md
+          </button>
+          <p className="mt-1 text-[12px] text-ink-3">Screens use the {(DESIGN_SYSTEMS.find((d) => d.id === j.designSystem) ?? DESIGN_SYSTEMS[0]).name} design system; change it in chat.</p>
+        </div>
         <div className="flex items-center gap-4">
           <p className="text-right text-[13px] leading-snug">
             <span className="font-semibold">
