@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, Loader2, Circle, Pin } from "lucide-react";
+import { ArrowUp, Check, Loader2, Circle, Pin, Paperclip, FileText, X, Hammer, MessageCircleQuestion } from "lucide-react";
 import type { Question } from "@/lib/fixtures";
 
-export type ChatItem =
-  | { kind: "user"; text: string }
-  | { kind: "architect"; text: string }
-  | { kind: "step"; text: string; state: "done" | "running" | "waiting" };
+export type ChatItem = { kind: "user"; text: string; files?: string[] } | { kind: "architect"; text: string } | { kind: "step"; text: string; state: "done" | "running" | "waiting" };
+
+export type ChatMode = "build" | "ask";
 
 export type Todo = { id: string; text: string; action?: () => void; actionLabel?: string };
 
@@ -89,6 +88,8 @@ export function ChatPane({
   onAllRecommended,
   onSend,
   placeholder,
+  mode,
+  onMode,
 }: {
   items: ChatItem[];
   todos: Todo[];
@@ -97,10 +98,19 @@ export function ChatPane({
   qTotal: number;
   onAnswer: (v: string[]) => void;
   onAllRecommended: () => void;
-  onSend: (text: string) => void;
+  onSend: (text: string, files: string[]) => void;
   placeholder: string;
+  mode: ChatMode;
+  onMode: (m: ChatMode) => void;
 }) {
   const [text, setText] = useState("");
+  const [files, setFiles] = useState<string[]>([]); // file names; the prototype records names, never contents
+  const [dragging, setDragging] = useState(false);
+  const picker = useRef<HTMLInputElement>(null);
+  const addFiles = (list: FileList | null) => {
+    const names = Array.from(list ?? []).map((f) => f.name);
+    if (names.length) setFiles((cur) => [...cur, ...names.filter((n) => !cur.includes(n))]);
+  };
   const end = useRef<HTMLDivElement>(null);
   // Braces matter: newer browsers return a Promise from scrollIntoView, and an effect must not return one.
   useEffect(() => {
@@ -108,13 +118,34 @@ export function ChatPane({
   }, [items.length, question]);
 
   const send = () => {
-    if (!text.trim()) return;
-    onSend(text.trim());
+    if (!text.trim() && !files.length) return;
+    onSend(text.trim(), files);
     setText("");
+    setFiles([]);
   };
 
   return (
     <section className="flex h-full w-full shrink-0 flex-col border-r border-line bg-paper" aria-label="Chat">
+      {/* Build changes the project and spends credits; Ask only answers, and is free. */}
+      <div className="flex items-center justify-between gap-3 border-b border-line bg-surface px-3 py-2">
+        <p className="flex items-center gap-1.5 text-[13px] font-semibold">
+          {mode === "build" ? <Hammer size={14} className="text-blue" /> : <MessageCircleQuestion size={14} className="text-green" />}
+          {mode === "build" ? "Build mode" : "Ask mode"}
+          <span className="font-normal text-ink-3">{mode === "build" ? "changes the project" : "answers only, free"}</span>
+        </p>
+        <div className="flex rounded-full border border-line-strong p-0.5 text-[12px]" role="group" aria-label="Chat mode">
+          {(["build", "ask"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => onMode(m)}
+              aria-pressed={mode === m}
+              className={`rounded-full px-2.5 py-0.5 ${mode === m ? "bg-blue-wash font-medium text-blue-ink" : "text-ink-2 hover:text-ink"}`}
+            >
+              {m === "build" ? "Build" : "Ask"}
+            </button>
+          ))}
+        </div>
+      </div>
       {/* Blockers stay pinned above the conversation until they're done. */}
       {todos.length > 0 && (
         <div className="m-3 mb-0 rounded-lg border border-amber/30 bg-amber-wash p-3">
@@ -141,6 +172,15 @@ export function ChatPane({
           m.kind === "user" ? (
             <div key={i} className="ml-8 rounded-lg bg-blue-wash px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-line text-ink">
               {m.text}
+              {m.files && m.files.length > 0 && (
+                <ul className={`flex flex-wrap gap-1.5 ${m.text ? "mt-2" : ""}`}>
+                  {m.files.map((f) => (
+                    <li key={f} className="flex max-w-full items-center gap-1 rounded border border-line bg-surface px-2 py-1 text-[12px]">
+                      <FileText size={12} className="shrink-0 text-ink-3" /> <span className="truncate">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ) : m.kind === "architect" ? (
             <div key={i} className="mr-4 text-sm leading-relaxed whitespace-pre-line text-ink">
@@ -164,24 +204,75 @@ export function ChatPane({
       </div>
 
       <div className="border-t border-line bg-surface p-3">
-        <div className="flex items-end gap-2 rounded-lg border border-line-strong bg-surface p-2 focus-within:border-blue">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-            rows={2}
-            placeholder={placeholder}
-            aria-label="Message"
-            className="flex-1 resize-none bg-transparent px-1 text-sm outline-none placeholder:text-ink-3"
-          />
-          <button onClick={send} aria-label="Send" className="flex h-8 w-8 items-center justify-center rounded-md bg-blue text-white hover:bg-blue-ink disabled:opacity-40" disabled={!text.trim()}>
-            <ArrowUp size={16} />
-          </button>
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragging(false);
+            addFiles(e.dataTransfer.files);
+          }}
+          className={`rounded-lg border bg-surface p-2 focus-within:border-blue ${dragging ? "border-blue bg-blue-wash/40" : "border-line-strong"}`}
+        >
+          {files.length > 0 && (
+            <ul className="mb-2 flex flex-wrap gap-1.5" aria-label="Attached files">
+              {files.map((f) => (
+                <li key={f} className="flex max-w-full items-center gap-1 rounded border border-line bg-paper py-1 pl-2 pr-1 text-[12px]">
+                  <FileText size={12} className="shrink-0 text-ink-3" />
+                  <span className="truncate">{f}</span>
+                  <button onClick={() => setFiles((cur) => cur.filter((x) => x !== f))} aria-label={`Remove ${f}`} className="rounded p-0.5 text-ink-3 hover:text-ink">
+                    <X size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-end gap-2">
+            <input
+              ref={picker}
+              type="file"
+              multiple
+              accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.csv,.txt,.md"
+              className="hidden"
+              onChange={(e) => {
+                addFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              onClick={() => picker.current?.click()}
+              aria-label="Attach files"
+              title="Attach files, or drop them here"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-3 hover:bg-paper hover:text-ink"
+            >
+              <Paperclip size={16} />
+            </button>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              rows={2}
+              placeholder={placeholder}
+              aria-label="Message"
+              className="flex-1 resize-none bg-transparent px-1 text-sm outline-none placeholder:text-ink-3"
+            />
+            <button
+              onClick={send}
+              aria-label="Send"
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-blue text-white hover:bg-blue-ink disabled:opacity-40"
+              disabled={!text.trim() && !files.length}
+            >
+              <ArrowUp size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </section>

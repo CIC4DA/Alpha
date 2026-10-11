@@ -32,7 +32,9 @@ export type Org = {
   kind: "own" | "customer";
   deployTarget: DeployTarget;
   cloudAccount: string; // e.g. "AWS 4821-0093-1177, eu-west-2"; empty until connected
+  creditTopups: TopUp[]; // this month's top-ups on top of the plan allowance
 };
+export type TopUp = { amount: number; at: string };
 export type Role = "admin" | "builder" | "developer" | "approver";
 export type Invite = { id: string; orgId: string; email: string; role: Role; status: "pending" | "accepted"; createdAt: string };
 export type Blueprint = {
@@ -216,8 +218,8 @@ export async function deleteProject(id: string): Promise<void> {
 // ---------- Workspaces ----------
 
 export const DEMO_ORG_ID = "demo-org";
-const ORG_COLS = "id, name, approval_required, kind, deploy_target, cloud_account";
-type OrgRow = { id: string; name: string; approval_required: boolean; kind: Org["kind"]; deploy_target: DeployTarget; cloud_account: string };
+const ORG_COLS = "id, name, approval_required, kind, deploy_target, cloud_account, credit_topups";
+type OrgRow = { id: string; name: string; approval_required: boolean; kind: Org["kind"]; deploy_target: DeployTarget; cloud_account: string; credit_topups: TopUp[] | null };
 const orgFromRow = (r: OrgRow): Org => ({
   id: r.id,
   name: r.name,
@@ -225,17 +227,18 @@ const orgFromRow = (r: OrgRow): Org => ({
   kind: r.kind ?? "own",
   deployTarget: r.deploy_target ?? "architect",
   cloudAccount: r.cloud_account ?? "",
+  creditTopups: r.credit_topups ?? [],
 });
 
 function demoOrgs(): Org[] {
   let list = readJSON<Org[] | null>(LOS, null);
   if (!list) {
     const old = readJSON<Partial<Org> | null>(LO, null);
-    list = [{ id: DEMO_ORG_ID, name: "Your workspace", approvalRequired: false, kind: "own", deployTarget: "architect", cloudAccount: "", ...(old ?? {}) }];
+    list = [{ id: DEMO_ORG_ID, name: "Your workspace", approvalRequired: false, kind: "own", deployTarget: "architect", cloudAccount: "", creditTopups: [], ...(old ?? {}) }];
     if (list[0].name === "Demo organisation") list[0].name = "Your workspace";
     localStorage.setItem(LOS, JSON.stringify(list));
   }
-  return list;
+  return list.map((o) => ({ ...o, creditTopups: o.creditTopups ?? [] }));
 }
 
 // Claim pending invitations once per sign-in, before the first workspace list, so a new workspace shows straight away.
@@ -278,7 +281,7 @@ export function switchOrg(id: string) {
 export async function createWorkspace(name: string, kind: Org["kind"]): Promise<Org> {
   let org: Org;
   if (isDemo()) {
-    org = { id: crypto.randomUUID(), name, approvalRequired: kind === "customer", kind, deployTarget: "architect", cloudAccount: "" };
+    org = { id: crypto.randomUUID(), name, approvalRequired: kind === "customer", kind, deployTarget: "architect", cloudAccount: "", creditTopups: [] };
     localStorage.setItem(LOS, JSON.stringify([...demoOrgs(), org]));
   } else {
     const { data, error } = await getSupabase()!.rpc("create_workspace", { p_name: name, p_kind: kind });
@@ -301,6 +304,7 @@ export async function updateOrg(patch: Partial<Org>): Promise<void> {
   if (patch.approvalRequired !== undefined) row.approval_required = patch.approvalRequired;
   if (patch.deployTarget !== undefined) row.deploy_target = patch.deployTarget;
   if (patch.cloudAccount !== undefined) row.cloud_account = patch.cloudAccount;
+  if (patch.creditTopups !== undefined) row.credit_topups = patch.creditTopups;
   if (!Object.keys(row).length) return;
   const { data, error } = await getSupabase()!.from("organisations").update(row).eq("id", o.id).select("id");
   if (error) throw new Error(error.message);
@@ -394,4 +398,41 @@ export async function saveJourney(id: string, journey: unknown): Promise<void> {
   }
   const { error } = await getSupabase()!.from("projects").update({ journey }).eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+// ---------- Credits: the plan's monthly allowance plus top-ups, minus what this workspace's projects spent ----------
+
+export const PLAN_NAME = "Pro";
+export const MONTHLY_ALLOWANCE = 20;
+
+export type Credits = {
+  plan: string;
+  allowance: number;
+  toppedUp: number;
+  topups: TopUp[];
+  used: number;
+  balance: number;
+  byProject: { id: string; name: string; status: Status; spend: number; build: number; tests: number; changes: number }[];
+};
+
+export async function getCredits(): Promise<Credits> {
+  const [org, projects] = await Promise.all([getOrg(), listProjects()]);
+  const byProject = projects
+    .filter((p) => p.spendUsd > 0)
+    .map((p) => {
+      // The ledger behind this is per run in the full product; the prototype splits a project's spend by stage.
+      const build = Math.min(p.spendUsd, 4.2);
+      const tests = Math.min(Math.max(p.spendUsd - build, 0), 0.3);
+      return { id: p.id, name: p.name, status: p.status, spend: p.spendUsd, build, tests, changes: Math.max(p.spendUsd - build - tests, 0) };
+    })
+    .sort((a, b) => b.spend - a.spend);
+  const used = byProject.reduce((t, p) => t + p.spend, 0);
+  const toppedUp = org.creditTopups.reduce((t, x) => t + x.amount, 0);
+  return { plan: PLAN_NAME, allowance: MONTHLY_ALLOWANCE, toppedUp, topups: org.creditTopups, used, balance: MONTHLY_ALLOWANCE + toppedUp - used, byProject };
+}
+
+/** Simulated: records the top-up against the workspace; no payment is taken in the prototype. */
+export async function topUp(amount: number): Promise<void> {
+  const org = await getOrg();
+  await updateOrg({ creditTopups: [...org.creditTopups, { amount, at: new Date().toISOString() }] });
 }

@@ -23,7 +23,7 @@ export type Journey = {
   blueprintSaved?: boolean;
   planEdit?: PlanEdit; // the builder's own edits to the plan; replaces the generated one
   reviewRequestedBy?: string; // user id; with a separate approver required, this person can't approve
-  chat: { from: "user" | "architect"; text: string; at: string }[];
+  chat: { from: "user" | "architect"; text: string; at: string; files?: string[] }[];
 };
 
 const empty: Journey = {

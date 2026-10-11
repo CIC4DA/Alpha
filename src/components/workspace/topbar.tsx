@@ -4,6 +4,7 @@ import { Check, Share2, Rocket } from "lucide-react";
 import { useState } from "react";
 import type { Project, Stage } from "@/lib/store";
 import { StatusBadge } from "../ui";
+import { CreditsPill } from "../credits";
 
 export type View = "builder" | "developer" | "approver";
 export const STAGES: { id: Exclude<Stage, "live">; label: string }[] = [
@@ -81,6 +82,7 @@ export function TopBar({
             </button>
           ))}
         </div>
+        <CreditsPill />
         <button
           onClick={() => {
             navigator.clipboard?.writeText(window.location.href);

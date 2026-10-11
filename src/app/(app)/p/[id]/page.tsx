@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useJourney } from "@/lib/journey";
 import { BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
 import { TopBar, STAGES, stageIndex, type View } from "@/components/workspace/topbar";
-import { ChatPane, type ChatItem, type Todo } from "@/components/workspace/chat";
+import { ChatPane, type ChatItem, type ChatMode, type Todo } from "@/components/workspace/chat";
 import { PlanCanvas } from "@/components/workspace/plan";
 import { ConnectCanvas } from "@/components/workspace/connect";
 import { BuildCanvas } from "@/components/workspace/build";
@@ -70,6 +70,7 @@ export default function WorkspacePage() {
   const [devFile, setDevFile] = useState<string | undefined>();
   const [pane, setPane] = useState<"chat" | "canvas">("chat"); // narrow screens show one at a time
   const [openAgent, setOpenAgent] = useState<AgentId | null>(null); // from the Agents page
+  const [chatMode, setChatMode] = useState<ChatMode>("build");
   const [chatW, setChatW] = useState(CHAT_DEFAULT); // wide screens: the person can drag the chat wider
   const body = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -185,7 +186,7 @@ export default function WorkspacePage() {
     }
     if (j.testRun === "fixed")
       out.push({ kind: "architect", text: "Fixed. The Policy agent now treats two different figures for the same fact as a conflict under clause 5.2 before anything else. All 6 checks pass." });
-    for (const m of j.chat) out.push({ kind: m.from === "user" ? "user" : "architect", text: m.text });
+    for (const m of j.chat) out.push(m.from === "user" ? { kind: "user", text: m.text, files: m.files } : { kind: "architect", text: m.text });
     if (project.stage === "live") out.push({ kind: "architect", text: `Live at ${liveHost(project, org)}. Total spent: $${project.spendUsd.toFixed(2)}, inside the estimate.` });
     return out;
   }, [project, j, question, org]);
@@ -218,25 +219,53 @@ export default function WorkspacePage() {
 
   const log = (text: string) => ({ from: "architect" as const, text, at: new Date().toISOString() });
 
-  const say = (text: string) =>
-    update((p) => ({
-      chat: [
-        ...p.chat,
-        { from: "user", text, at: new Date().toISOString() },
-        {
-          from: "architect",
-          text:
-            view === "developer"
+  // Files attached in chat do real work in the journey: a policy connects as the policy, other PDFs become sample
+  // applications (and so golden tests). The prototype records file names only, never contents.
+  const say = (text: string, files: string[] = []) =>
+    update((p) => {
+      const now = new Date().toISOString();
+      const connected = { ...p.connected };
+      const notes: string[] = [];
+      const pdfs = files.filter((f) => f.toLowerCase().endsWith(".pdf"));
+      const others = files.filter((f) => !f.toLowerCase().endsWith(".pdf"));
+      const policy = pdfs.find((f) => /polic/i.test(f));
+      if (policy) {
+        connected.policy = policy;
+        notes.push(`I've connected ${policy} as the lending policy. The Policy agent will check against it and cite its clauses.`);
+      }
+      const samples = pdfs.filter((f) => f !== policy);
+      if (samples.length) {
+        const all = [...(connected.samples ? connected.samples.split(", ") : []), ...samples];
+        connected.samples = Array.from(new Set(all)).join(", ");
+        notes.push(`I've added ${samples.length === 1 ? samples[0] : `${samples.length} PDFs`} as sample applications. Each becomes a golden test case before you ship.`);
+      }
+      if (others.length) notes.push(`I've saved ${others.join(", ")} with the project. In the full product I'd read ${others.length === 1 ? "it" : "them"} and suggest changes to the plan.`);
+      if (files.length) notes.push("Everything attached is listed in Connect.");
+      const reply =
+        text && !files.length
+          ? chatMode === "ask"
+            ? "Ask mode answers without changing the project, and it's free. In the full product I'd answer from the plan, the code, the traces and the test results. In this prototype answers are scripted. Switch to Build when you want a change made."
+            : view === "developer"
               ? "In the full product this change becomes a new version: I'd show you the diff, run the golden tests on it, and apply it only if they pass. In this prototype code changes are scripted, so it's saved here but not applied."
-              : "In the full product this becomes a new version: I'd update the plan, rebuild only what's affected and re-run the tests before you see it. In this prototype the build is scripted, so your message is saved but not applied.",
-          at: new Date().toISOString(),
-        },
-      ],
-    }));
+              : "In the full product this becomes a new version: I'd update the plan, rebuild only what's affected and re-run the tests before you see it. In this prototype the build is scripted, so your message is saved but not applied."
+          : "";
+      return {
+        connected,
+        chat: [...p.chat, { from: "user", text, at: now, files }, { from: "architect", text: [notes.join(" "), reply].filter(Boolean).join("\n\n"), at: now }],
+      };
+    });
 
   const canvas = () => {
     if (view === "developer")
-      return <DeveloperCanvas tab={devTab} onTab={setDevTab} buildDone={j.buildDone} initialFile={devFile} extraFiles={j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : []} />;
+      return (
+        <DeveloperCanvas
+          tab={devTab}
+          onTab={setDevTab}
+          buildDone={j.buildDone}
+          initialFile={devFile}
+          extraFiles={j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : []}
+        />
+      );
     if (view === "approver")
       return (
         <ApproverCanvas
@@ -269,7 +298,10 @@ export default function WorkspacePage() {
             onSavePlan={(plan) =>
               update((p) => ({
                 planEdit: plan,
-                chat: [...p.chat, log(`Plan updated: ${plan.screens.length} screens, ${plan.agents.length} agents and ${plan.rules.length} rules, each rule a test. The estimate on the plan reflects the change.`)],
+                chat: [
+                  ...p.chat,
+                  log(`Plan updated: ${plan.screens.length} screens, ${plan.agents.length} agents and ${plan.rules.length} rules, each rule a test. The estimate on the plan reflects the change.`),
+                ],
               }))
             }
             onToggleSuggested={(sid) => update((p) => ({ suggestedOn: p.suggestedOn.includes(sid) ? p.suggestedOn.filter((x) => x !== sid) : [...p.suggestedOn, sid] }))}
@@ -342,7 +374,11 @@ export default function WorkspacePage() {
               update({ blueprintSaved: true });
             }}
             onRequestReview={() => {
-              update((p) => ({ review: "requested", reviewRequestedBy: user?.id, chat: [...p.chat, log(`Review requested for version ${p.version}. The approver has it in their Inbox, with the checklist and evidence.`)] }));
+              update((p) => ({
+                review: "requested",
+                reviewRequestedBy: user?.id,
+                chat: [...p.chat, log(`Review requested for version ${p.version}. The approver has it in their Inbox, with the checklist and evidence.`)],
+              }));
               persist({ status: "in_review" });
             }}
             onDeploy={() => persist({ stage: "live", status: "live" })}
@@ -415,7 +451,11 @@ export default function WorkspacePage() {
               setPane("canvas");
             }}
             onSend={say}
-            placeholder={view === "developer" ? "Ask about the code, or ask for a change" : view === "approver" ? "Comment for the builder" : "Ask for a change, or ask a question"}
+            mode={chatMode}
+            onMode={setChatMode}
+            placeholder={
+              chatMode === "ask" ? "Ask a question; nothing will change" : view === "developer" ? "Ask for a change to the code" : view === "approver" ? "Comment for the builder" : "Ask for a change"
+            }
           />
         </div>
         <div
@@ -433,9 +473,14 @@ export default function WorkspacePage() {
             if (e.key === "ArrowLeft") setChat(chatW - 24);
             if (e.key === "ArrowRight") setChat(chatW + 24);
           }}
-          className="group relative -ml-[3px] hidden w-[6px] shrink-0 cursor-col-resize lg:block"
+          className="group relative z-10 -mx-[5px] hidden w-[10px] shrink-0 cursor-col-resize lg:block"
         >
           <span className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-transparent transition-colors group-hover:bg-blue/50 group-focus-visible:bg-blue" />
+          <span className="absolute left-1/2 top-1/2 flex h-9 w-[10px] -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-[3px] rounded-full border border-line-strong bg-surface shadow-sm transition-colors group-hover:border-blue group-focus-visible:border-blue">
+            <span className="h-[3px] w-[3px] rounded-full bg-ink-3" />
+            <span className="h-[3px] w-[3px] rounded-full bg-ink-3" />
+            <span className="h-[3px] w-[3px] rounded-full bg-ink-3" />
+          </span>
         </div>
         <section className={`${pane === "chat" ? "hidden" : "block"} min-w-0 flex-1 overflow-y-auto bg-paper lg:block`}>{canvas()}</section>
       </div>

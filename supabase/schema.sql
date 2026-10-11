@@ -266,3 +266,6 @@ alter table public.projects add constraint projects_created_by_fkey foreign key 
 alter table public.invitations alter column invited_by drop not null;
 alter table public.invitations drop constraint if exists invitations_invited_by_fkey;
 alter table public.invitations add constraint invitations_invited_by_fkey foreign key (invited_by) references auth.users(id) on delete set null;
+
+-- Credits: top-ups recorded per workspace (simulated in the prototype; no payment is taken).
+alter table public.organisations add column if not exists credit_topups jsonb not null default '[]'::jsonb;

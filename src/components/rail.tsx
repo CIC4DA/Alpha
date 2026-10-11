@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, Inbox, FolderKanban, Bot, Plug, Compass, Settings, LifeBuoy, LogOut, ChevronsLeft, ChevronsRight, Plus } from "lucide-react";
+import { Home, Inbox, FolderKanban, Bot, Plug, Compass, Settings, LifeBuoy, LogOut, ChevronsLeft, ChevronsRight, Plus, Wallet } from "lucide-react";
 import { listProjects, type Project } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { StatusBadge } from "./ui";
 import { WorkspaceSwitcher } from "./workspace-switcher";
+import { CreditsPill } from "./credits";
 
 export function Mark({ className = "" }: { className?: string }) {
   // A set square: the drafting tool, not a letter in a box.
@@ -119,6 +120,7 @@ export function Rail({ collapsedByDefault = false }: { collapsedByDefault?: bool
       <nav className="flex flex-col gap-0.5 px-2">{NAV.map((n) => item(n.href, n.label, n.icon))}</nav>
 
       <div className="mt-auto flex flex-col gap-0.5 border-t border-line px-2 py-2">
+        {collapsed ? item("/usage", "Usage and credits", Wallet) : <div className="mb-1"><CreditsPill compact /></div>}
         {item("/settings", "Workspace settings", Settings)}
         {item("/help", "Help", LifeBuoy)}
         <div className={`mt-1 flex items-center gap-2 rounded-md px-2.5 py-2 ${collapsed ? "justify-center" : ""}`}>
