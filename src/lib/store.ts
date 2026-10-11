@@ -46,7 +46,14 @@ export type Blueprint = {
   suggestedOn: string[];
   source: string; // "Loan Triage Desk, built for Kestrel Lending"
   createdAt: string;
+  version: number; // goes up each time the FDE publishes an update from the source project
+  sourceProjectId?: string; // the project it was saved from; updates are published from it
+  sourceVersion: number; // the source project's version the latest blueprint version was taken from
+  changelog: BlueprintChange[];
 };
+export type BlueprintChange = { version: number; note: string; at: string };
+/** A project started from a blueprint, in any workspace the person belongs to. */
+export type Deployment = { project: Project; orgName: string; onVersion: number; journey: Record<string, unknown> };
 
 type Row = {
   id: string;
@@ -340,7 +347,13 @@ export async function invite(email: string, role: Role): Promise<Invite> {
 // ---------- Blueprints: an FDE's own library, reusable in any workspace ----------
 
 export async function listBlueprints(): Promise<Blueprint[]> {
-  if (isDemo()) return readJSON<Blueprint[]>(LBP, []);
+  if (isDemo())
+    return readJSON<Blueprint[]>(LBP, []).map((b) => ({
+      ...b,
+      version: b.version ?? 1,
+      sourceVersion: b.sourceVersion ?? 1,
+      changelog: b.changelog ?? [{ version: 1, note: `Saved from ${b.source}`, at: b.createdAt }],
+    }));
   const { data, error } = await getSupabase()!.from("blueprints").select("*").order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => ({
@@ -352,22 +365,78 @@ export async function listBlueprints(): Promise<Blueprint[]> {
     suggestedOn: r.suggested_on ?? [],
     source: r.source,
     createdAt: r.created_at,
+    version: r.version ?? 1,
+    sourceProjectId: r.source_project ?? undefined,
+    sourceVersion: r.source_version ?? 1,
+    changelog: r.changelog ?? [],
   }));
 }
 
-export async function saveBlueprint(b: Omit<Blueprint, "id" | "createdAt">): Promise<Blueprint> {
+export async function saveBlueprint(b: Omit<Blueprint, "id" | "createdAt" | "version" | "changelog"> & Partial<Pick<Blueprint, "version" | "changelog">>): Promise<Blueprint> {
+  const full = { ...b, version: b.version ?? 1, changelog: b.changelog ?? [{ version: 1, note: `Saved from ${b.source}`, at: new Date().toISOString() }] };
   if (isDemo()) {
-    const bp: Blueprint = { ...b, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    const bp: Blueprint = { ...full, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
     localStorage.setItem(LBP, JSON.stringify([bp, ...readJSON<Blueprint[]>(LBP, [])]));
     return bp;
   }
   const { data, error } = await getSupabase()!
     .from("blueprints")
-    .insert({ name: b.name, description: b.description, prompt: b.prompt, answers: b.answers, suggested_on: b.suggestedOn, source: b.source })
+    .insert({
+      name: full.name,
+      description: full.description,
+      prompt: full.prompt,
+      answers: full.answers,
+      suggested_on: full.suggestedOn,
+      source: full.source,
+      version: full.version,
+      source_project: full.sourceProjectId ?? null,
+      source_version: full.sourceVersion,
+      changelog: full.changelog,
+    })
     .select("id, created_at")
     .single();
   if (error) throw new Error(error.message);
-  return { ...b, id: data.id, createdAt: data.created_at };
+  return { ...full, id: data.id, createdAt: data.created_at };
+}
+
+/** Publish what changed in the source project as the blueprint's next version. */
+export async function publishBlueprint(bp: Blueprint, note: string, sourceVersion: number): Promise<Blueprint> {
+  const version = bp.version + 1;
+  const next: Blueprint = { ...bp, version, sourceVersion, changelog: [...bp.changelog, { version, note, at: new Date().toISOString() }] };
+  if (isDemo()) {
+    localStorage.setItem(LBP, JSON.stringify(readJSON<Blueprint[]>(LBP, []).map((x) => (x.id === bp.id ? next : x))));
+    return next;
+  }
+  const { data, error } = await getSupabase()!
+    .from("blueprints")
+    .update({ version, source_version: sourceVersion, changelog: next.changelog })
+    .eq("id", bp.id)
+    .select("id");
+  if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("Only the person who saved this blueprint can publish an update to it.");
+  return next;
+}
+
+/** Every project started from this blueprint, across all the workspaces this person belongs to. */
+export async function listDeployments(bpId: string): Promise<Deployment[]> {
+  const orgs = await listOrgs();
+  const orgName = (id?: string) => orgs.find((o) => o.id === (id ?? DEMO_ORG_ID))?.name ?? "Another workspace";
+  if (isDemo()) {
+    const out: Deployment[] = [];
+    for (const p of localRead()) {
+      const j = await loadJourney(p.id);
+      if (j?.blueprintId === bpId) out.push({ project: p, orgName: orgName(p.orgId), onVersion: Number(j.blueprintVersion ?? 1), journey: j });
+    }
+    return out;
+  }
+  const { data, error } = await getSupabase()!.from("projects").select("*").eq("journey->>blueprintId", bpId);
+  if (error) throw new Error(error.message);
+  return (data as (Row & { journey: Record<string, unknown> })[]).map((r) => ({
+    project: fromRow(r),
+    orgName: orgName(r.org_id),
+    onVersion: Number(r.journey?.blueprintVersion ?? 1),
+    journey: r.journey,
+  }));
 }
 
 // ---------- Journey state: local in demo mode, on the project row otherwise ----------

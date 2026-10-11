@@ -269,3 +269,9 @@ alter table public.invitations add constraint invitations_invited_by_fkey foreig
 
 -- Credits: top-ups recorded per workspace (simulated in the prototype; no payment is taken).
 alter table public.organisations add column if not exists credit_topups jsonb not null default '[]'::jsonb;
+
+-- Blueprint versions: an FDE publishes updates from the source project and rolls them out to customers.
+alter table public.blueprints add column if not exists version int not null default 1;
+alter table public.blueprints add column if not exists source_project uuid references public.projects(id) on delete set null;
+alter table public.blueprints add column if not exists source_version int not null default 1;
+alter table public.blueprints add column if not exists changelog jsonb not null default '[]'::jsonb;

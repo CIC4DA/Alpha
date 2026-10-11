@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Home, Inbox, FolderKanban, Bot, Plug, Compass, Settings, LifeBuoy, LogOut, ChevronsLeft, ChevronsRight, Plus, Wallet } from "lucide-react";
+import { Home, Inbox, FolderKanban, Bot, Plug, Compass, Settings, LifeBuoy, LogOut, ChevronsLeft, ChevronsRight, Plus, Wallet, Layers } from "lucide-react";
 import { listProjects, type Project } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { StatusBadge } from "./ui";
@@ -25,6 +25,7 @@ const NAV = [
   { href: "/inbox", label: "Inbox", icon: Inbox },
   { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/blueprints", label: "Blueprints", icon: Layers },
   { href: "/connections", label: "Connections", icon: Plug },
   { href: "/explore", label: "Explore", icon: Compass },
 ];

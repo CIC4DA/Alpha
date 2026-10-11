@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FileCode2, Folder, GitBranch, Check, Copy, KeyRound, Terminal, Database as DbIcon, Lock, Search } from "lucide-react";
+import { FileCode2, Folder, GitBranch, Check, Copy, KeyRound, Terminal, Database as DbIcon, Lock, Search, GitPullRequest, GitMerge, ChevronDown, X, FlaskConical, Loader2 } from "lucide-react";
+import { PULL_REQUESTS, reviewComment, type PrState, type PullRequest } from "@/lib/devloop";
 import { BUILD_STEPS, FILES, TRACE } from "@/lib/fixtures";
 import { Button } from "../ui";
 
@@ -303,53 +304,197 @@ function Env() {
   );
 }
 
-function GitHub() {
-  const [state, setState] = useState<"off" | "connecting" | "on">("off");
+export type GitHubProps = {
+  connected: boolean;
+  onConnect: () => void;
+  repo: string;
+  version: number;
+  built: boolean;
+  approvalRequired: boolean;
+  prs: Record<string, PrState>;
+  onPrState: (id: string, state: PrState) => void;
+  onMerge: (pr: PullRequest) => void;
+};
+
+const PR_CHIP: Record<PrState, { label: string; cls: string }> = {
+  open: { label: "Checks not run", cls: "text-ink-3" },
+  checking: { label: "Running checks", cls: "text-amber" },
+  passed: { label: "Checks pass", cls: "text-green" },
+  failed: { label: "Checks fail", cls: "text-red" },
+  merged: { label: "Merged", cls: "text-blue" },
+  closed: { label: "Closed", cls: "text-ink-3" },
+};
+
+function PullRequestCard({ pr, state, gh }: { pr: PullRequest; state: PrState; gh: GitHubProps }) {
+  const [open, setOpen] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ran = state === "passed" || state === "failed" || state === "merged";
+  const add = pr.files.reduce((n, f) => n + f.add, 0);
+  const del = pr.files.reduce((n, f) => n + f.del, 0);
   return (
-    <div className="overflow-y-auto p-6">
-      {state !== "on" ? (
+    <li className="rounded-lg border border-line bg-surface">
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-start gap-3 px-4 py-3 text-left">
+        <GitPullRequest size={16} className={`mt-0.5 shrink-0 ${state === "merged" ? "text-blue" : state === "closed" ? "text-ink-3" : "text-green"}`} />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">
+            {pr.title} <span className="font-normal text-ink-3">#{pr.number}</span>
+          </span>
+          <span className="mt-0.5 block text-[12px] text-ink-3">
+            <span className="font-mono">{pr.branch}</span>, opened from {pr.from}, {pr.files.length} files <span className="text-green">+{add}</span> <span className="text-red">−{del}</span>
+          </span>
+        </span>
+        <span className={`shrink-0 text-[12px] font-medium ${PR_CHIP[state].cls}`}>{PR_CHIP[state].label}</span>
+        <ChevronDown size={15} className={`mt-0.5 shrink-0 text-ink-3 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-line px-4 pb-4 pt-3">
+          <ul className="space-y-0.5 font-mono text-[12px]">
+            {pr.files.map((f) => (
+              <li key={f.path} className="flex gap-2">
+                <span className="min-w-0 flex-1 truncate">{f.path}</span>
+                <span className="text-green">+{f.add}</span>
+                <span className="text-red">−{f.del}</span>
+              </li>
+            ))}
+          </ul>
+          <button onClick={() => setShowDiff((d) => !d)} className="mt-2 text-[12px] font-medium text-blue hover:underline">
+            {showDiff ? "Hide the diff" : "Show the diff"}
+          </button>
+          {showDiff && (
+            <pre className="mt-2 max-h-72 overflow-auto rounded-md bg-ink p-3 font-mono text-[11.5px] leading-[1.6]">
+              {pr.diff.split("\n").map((l, i) => (
+                <div key={i} className={l.startsWith("+") && !l.startsWith("+++") ? "text-[#8fd6a8]" : l.startsWith("-") && !l.startsWith("---") ? "text-[#ff9b9b]" : l.startsWith("@@") ? "text-[#9ab4f5]" : "text-[#d6dbe4]"}>
+                  {l || " "}
+                </div>
+              ))}
+            </pre>
+          )}
+
+          {state === "open" && (
+            <div className="mt-4 rounded-md bg-paper p-3 text-[13px]">
+              <p>Architect runs the same checks on this branch as on its own changes: the golden tests, on outcome and reason, and the plan&apos;s rules.</p>
+              <Button size="sm" className="mt-2" onClick={() => { gh.onPrState(pr.id, "checking"); setTimeout(() => gh.onPrState(pr.id, pr.pass ? "passed" : "failed"), 1800); }}>
+                <FlaskConical size={14} /> Run the checks
+              </Button>
+            </div>
+          )}
+          {state === "checking" && <p className="mt-4 flex items-center gap-2 text-[13px] text-ink-2"><Loader2 size={14} className="animate-spin" /> Running 3 golden cases and 3 plan rules on {pr.branch}</p>}
+
+          {ran && (
+            <div className="mt-4">
+              <h4 className="text-[13px] font-semibold">Golden tests: {pr.checks} of 6 checks pass</h4>
+              <table className="mt-1.5 w-full text-[13px]">
+                <tbody>
+                  {pr.results.map((r) => (
+                    <tr key={r.caseId} className="border-b border-line align-top last:border-0">
+                      <td className="w-5 py-1.5">{r.pass ? <Check size={14} className="text-green" /> : <X size={14} className="text-red" />}</td>
+                      <td className="w-36 py-1.5 font-medium">{r.title}</td>
+                      <td className="w-32 py-1.5">{r.outcome}<span className="block text-[12px] text-ink-3">cites {r.cited}</span></td>
+                      <td className="py-1.5 text-ink-2">{r.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <h4 className="mt-3 text-[13px] font-semibold">Plan rules</h4>
+              <ul className="mt-1 space-y-1 text-[13px]">
+                {pr.rules.map((r) => (
+                  <li key={r.rule} className="flex gap-2">
+                    {r.pass ? <Check size={14} className="mt-0.5 shrink-0 text-green" /> : <X size={14} className="mt-0.5 shrink-0 text-red" />}
+                    <span>
+                      {r.rule}
+                      {r.note && <span className="block text-ink-2">{r.note}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {state === "passed" && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button size="sm" variant="primary" onClick={() => gh.onMerge(pr)}>
+                <GitMerge size={14} /> Merge as version {gh.version + 1}
+              </Button>
+              <p className="text-[12px] text-ink-3">{gh.approvalRequired ? "It goes live only after this workspace's approver reviews it." : "It becomes the preview; ship it like any other version."}</p>
+            </div>
+          )}
+          {state === "failed" && (
+            <div className="mt-4 rounded-md border border-line bg-red-wash p-3 text-[13px]">
+              <p className="font-medium text-red">Merging is blocked while a check fails.</p>
+              <p className="mt-1 text-ink-2">Architect posted these results on the pull request, so {pr.from} can read them and push a fix. The checks run again on every push.</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(reviewComment(pr));
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1400);
+                  }}
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied" : `Copy results for ${pr.from}`}
+                </Button>
+                <Button size="sm" onClick={() => gh.onPrState(pr.id, "closed")}>
+                  Close pull request
+                </Button>
+              </div>
+            </div>
+          )}
+          {state === "merged" && <p className="mt-4 text-[13px] text-ink-2">Merged into main. Architect recorded it as a version, so it shows in chat and can be reverted like any other.</p>}
+        </div>
+      )}
+    </li>
+  );
+}
+
+function GitHub({ gh }: { gh: GitHubProps }) {
+  const [connecting, setConnecting] = useState(false);
+  if (!gh.connected)
+    return (
+      <div className="overflow-y-auto p-6">
         <div className="max-w-lg rounded-lg border border-line bg-surface p-5">
           <p className="flex items-center gap-2 font-semibold">
             <GitBranch size={16} /> Sync with GitHub
           </p>
           <p className="mt-2 text-sm leading-relaxed text-ink-2">
-            Installs the Architect GitHub App on the repositories you choose. Every Architect version becomes a pull request; every push to your main branch comes back into Architect and runs the tests.
+            Work in Cursor, Claude Code or Codex. Every Architect version becomes a commit on main; every pull request from your editor comes back here, and Architect runs the golden tests and the plan&apos;s rules on it before it can merge.
           </p>
           <Button
             variant="primary"
             className="mt-4"
             onClick={() => {
-              setState("connecting");
-              setTimeout(() => setState("on"), 1400);
+              setConnecting(true);
+              setTimeout(gh.onConnect, 1400);
             }}
-            disabled={state === "connecting"}
+            disabled={connecting}
           >
-            {state === "connecting" ? "Connecting" : "Connect GitHub"}
+            {connecting ? "Connecting" : "Connect GitHub"}
           </Button>
-          <p className="mt-3 text-[12px] text-ink-3">Simulated in this prototype.</p>
+          <p className="mt-3 text-[12px] text-ink-3">Simulated in this prototype: no repository is created.</p>
         </div>
-      ) : (
-        <div className="max-w-2xl appear">
-          <p className="flex items-center gap-2 text-sm">
-            <Check size={15} className="text-green" /> Synced with <span className="font-mono text-[13px]">kestrel-lending/loan-triage-desk</span>
-          </p>
-          <ul className="mt-4 divide-y divide-line rounded-lg border border-line bg-surface text-sm">
-            <li className="flex items-center justify-between px-4 py-3">
-              <span>
-                <span className="font-mono text-[12px]">main</span> <span className="text-ink-2">v1, live</span>
-              </span>
-              <span className="text-[12px] text-green">Tests 6 of 6</span>
-            </li>
-            <li className="flex items-center justify-between px-4 py-3">
-              <span>
-                <span className="font-mono text-[12px]">architect/route-large-loans</span> <span className="text-ink-2">Pull request: route loans over £150,000 to the credit committee</span>
-              </span>
-              <span className="text-[12px] text-amber">Checks running</span>
-            </li>
+      </div>
+    );
+  const shown = PULL_REQUESTS;
+  return (
+    <div className="h-full overflow-y-auto p-6">
+      <div className="max-w-3xl appear">
+        <p className="flex flex-wrap items-center gap-2 text-sm">
+          <Check size={15} className="text-green" /> Synced with <span className="font-mono text-[13px]">{gh.repo}</span>
+          <span className="text-ink-3">main is version {gh.version}</span>
+        </p>
+        <h3 className="mt-6 text-sm font-semibold">Pull requests from your editor</h3>
+        <p className="mt-0.5 text-[13px] text-ink-3">A merge here is the same as a change in chat: a new version, tested, and reviewed if your workspace requires it.</p>
+        {!gh.built ? (
+          <p className="mt-3 text-sm text-ink-2">Nothing to review until the first build is done.</p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {shown.map((pr) => (
+              <PullRequestCard key={pr.id} pr={pr} state={gh.prs[pr.id] ?? "open"} gh={gh} />
+            ))}
           </ul>
-          <p className="mt-3 text-[13px] text-ink-3">Architect never force-pushes. If both sides change, its version stays on its own branch as a pull request.</p>
-        </div>
-      )}
+        )}
+        <p className="mt-4 text-[12px] text-ink-3">Architect never force-pushes. If both sides change the same file, its version waits on its own branch as a pull request. The two pull requests here are sample data.</p>
+      </div>
     </div>
   );
 }
@@ -402,7 +547,8 @@ function CodingAgent() {
             </li>
           ))}
         </ul>
-        <p className="mt-4 text-[12px] text-ink-3">The MCP server is described in the architecture doc; it isn&apos;t running in this prototype.</p>
+        <p className="mt-4 text-[13px] text-ink-2">Changes your agent makes come back as pull requests. Architect checks them in the GitHub tab before they can merge.</p>
+        <p className="mt-2 text-[12px] text-ink-3">The MCP server is described in the architecture doc; it isn&apos;t running in this prototype.</p>
       </div>
     </div>
   );
@@ -415,6 +561,7 @@ export function DeveloperCanvas({
   hasData = false,
   initialFile,
   extraFiles = [],
+  gh,
 }: {
   tab: DevTab;
   onTab: (t: DevTab) => void;
@@ -422,6 +569,7 @@ export function DeveloperCanvas({
   hasData?: boolean;
   initialFile?: string;
   extraFiles?: { path: string; body: string }[];
+  gh: GitHubProps;
 }) {
   return (
     <div className="flex h-full flex-col">
@@ -444,7 +592,7 @@ export function DeveloperCanvas({
         {tab === "traces" && <Traces />}
         {tab === "logs" && <Logs done={buildDone} />}
         {tab === "env" && <Env />}
-        {tab === "github" && <GitHub />}
+        {tab === "github" && <GitHub gh={gh} />}
         {tab === "agent" && <CodingAgent />}
       </div>
     </div>

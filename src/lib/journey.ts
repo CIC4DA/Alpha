@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadJourney, saveJourney } from "./store";
+import type { PrState } from "./devloop";
 
 export type PlanItem = { name: string; detail: string };
 export type PlanEdit = { summary: string; screens: PlanItem[]; agents: PlanItem[]; rules: string[] };
@@ -35,6 +36,11 @@ export type Journey = {
   tools?: { name: string; detail: string }[];
   browserTest?: boolean; // click through every screen in a real browser after each build
   currentSha?: string; // set when the builder reverts to an earlier version
+  github?: boolean; // repository connected
+  prs?: Record<string, PrState>; // pull requests from a coding agent, by id
+  models?: Partial<Record<string, string>>; // agent id -> model it runs on, after a tested switch
+  blueprintId?: string; // started from this blueprint
+  blueprintVersion?: number; // ...at this blueprint version
 };
 
 const empty: Journey = {

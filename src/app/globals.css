@@ -57,3 +57,11 @@ body { font-family: var(--font-hanken), system-ui, sans-serif; font-feature-sett
 .appear { animation: appear 240ms ease-out both; }
 @keyframes pulse-dot { 0%, 100% { opacity: .35 } 50% { opacity: 1 } }
 .pulse-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
+
+/* Scroll without a visible scrollbar, as in Architect today. Wheel, touch and keyboard scrolling still work. */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}

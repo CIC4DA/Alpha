@@ -87,7 +87,7 @@ export default function LoginPage() {
             Prototype to production in one project.
           </h1>
           <p className="mt-5 max-w-[30rem] text-[17px] leading-relaxed text-ink-2">
-            Describe the agentic app you need. Architect builds it, tests it on your own files, hands it to your developers without a rewrite, and ships it once it&apos;s approved.
+            Start with an idea and build it into an agentic app. Keep developing it in chat or in your own editor, check it on real cases, and ship it once it&apos;s approved, without a rewrite.
           </p>
         </div>
 

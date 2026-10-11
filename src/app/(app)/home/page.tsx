@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GitBranch, LayoutTemplate, PenLine, ArrowUp, Layers } from "lucide-react";
 import { createProject, getOrg, listBlueprints, listProjects, saveJourney, type Blueprint, type Org, type Project } from "@/lib/store";
-import { useAuth } from "@/lib/auth";
 import { SAMPLE_PROMPT } from "@/lib/fixtures";
 import { ProjectCard } from "@/components/project-card";
 import { Button } from "@/components/ui";
@@ -20,7 +19,6 @@ const TEMPLATES = [
 type Mode = "describe" | "import" | "template";
 
 export default function HomePage() {
-  const { user } = useAuth();
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("describe");
   const [prompt, setPrompt] = useState("");
@@ -47,7 +45,7 @@ export default function HomePage() {
     setError(null);
     try {
       const p = await createProject(b.prompt, b.name);
-      await saveJourney(p.id, { answers: b.answers, suggestedOn: b.suggestedOn, fromBlueprint: b.source });
+      await saveJourney(p.id, { answers: b.answers, suggestedOn: b.suggestedOn, fromBlueprint: `${b.source} (blueprint version ${b.version})`, blueprintId: b.id, blueprintVersion: b.version });
       router.push(`/p/${p.id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -69,17 +67,16 @@ export default function HomePage() {
   };
 
   const waiting = (projects ?? []).filter((p) => p.status === "in_review" || p.stage === "connect");
-  const first = user?.name.split(" ")[0];
 
   return (
     <div className="mx-auto max-w-[1040px] px-4 py-8 sm:px-8 sm:py-12">
       <h1 className="font-serif text-[30px] leading-tight tracking-[-0.01em] sm:text-[40px]">
-        {org?.kind === "customer" ? `What should we build for ${org.name}?` : `What should we build${first ? `, ${first}` : ""}?`}
+        {org?.kind === "customer" ? `What are we building for ${org.name}?` : "What do you want to build?"}
       </h1>
       <p className="mt-2 text-ink-2">
         {org?.kind === "customer"
-          ? "Describe their process, or start from one of your blueprints. You'll see a plan and its price before anything is built."
-          : "Describe the work you want automated. You'll see a plan and its price before anything is built."}
+          ? "Start from their process or one of your blueprints. Shape it in chat, build it, and keep developing it here or in your own editor."
+          : "Start with an idea. Shape it in chat, build it, and keep developing it here or in your own editor. You see the plan and its price before anything is built."}
       </p>
 
       <div className="mt-8 rounded-xl border border-line-strong bg-surface">

@@ -34,6 +34,9 @@ Also in the prototype:
 - **Agents page**: every agent in the workspace with its model, runs, cost and failures, editable in place. Studio and GitAgent live inside Architect; nobody has to go to either.
 - **Workspace settings**: require a separate approver (maker-checker), choose where apps run, invite people by role. With no setup, everyone can do everything.
 - **Navigation**: a persistent rail with recent projects, projects named from the prompt with a description, statuses, an Inbox for everything waiting on you, and import from GitHub.
+- **Pull requests from your editor**: a developer works in Cursor, Claude Code or Codex and opens a pull request. Architect runs the golden tests, on outcome and reason, and the plan's rules on the branch; merge is blocked while anything fails, and the failures go back to the coding agent as a review comment. A merge becomes a version, reviewed like any other.
+- **Compare models on the golden tests**: for any agent, run its cases on several models side by side, with pass or fail per case and why, cost per case and per month at the customer's volume, and speed. A model can be switched in only if it passes every case; the switch is a version you can revert.
+- **Blueprints page**: blueprints are versioned. When the original customer's app improves, publish the change as the next version, see every customer project built from it across your workspaces and which are behind, and roll it out. Each roll-out is tested on that customer's own files and goes live through their review.
 - **Credits**: the balance sits in the top bar and the rail, as in Architect today. It opens to usage by project, a link to the full Usage page, and a quick top-up (simulated; no payment is taken).
 
 ### Nothing from today's Architect is dropped
@@ -61,6 +64,7 @@ Not built in the prototype: the dark theme and the support chat.
 
 | Real | Scripted, with stand-in data |
 | --- | --- |
+| Blueprint versions, publishing from the source project, and roll-outs into other workspaces' projects | The two pull requests, their diffs and check results; model comparison figures |
 | Sign-in (Google, GitHub, email link) through Supabase | The build, tests, fix and deploy timings and results |
 | Projects, workspaces, invitations, blueprints and journey state in Postgres with row-level security | Agent outputs, traces, logs and run figures (from the loan-triage fixtures) |
 | Invitations become memberships, with the role's permissions, the first time that email signs in | The customer cloud-account connection and deploys into it |
@@ -94,10 +98,12 @@ src/app/(app)/p/[id]       The project workspace: stages, chat, three views
 src/app/(app)/inbox        Reviews, failing tests, unfinished setup
 src/app/(app)/settings     Workspace settings: approval rule, where apps run, members
 src/app/(app)/agents       Every agent in the workspace, with runs, cost and failures
+src/app/(app)/blueprints   Blueprint versions, customer projects on each, roll-outs
 src/app/live/[slug]        The generated app, preview or live
 src/components/workspace   One component per stage and view
 src/lib/store.ts           One data API, two backends: Supabase or local demo
 src/lib/fixtures.ts        The loan-triage script: questions, plan, build steps, golden cases
+src/lib/devloop.ts         Pull requests from coding agents, model comparison runs
 supabase/schema.sql        Tables, row-level security, new-user trigger
 ```
 
@@ -107,6 +113,8 @@ supabase/schema.sql        Tables, row-level security, new-user trigger
 
 **Added after Lyzr's 9 Oct reply:** customer workspaces, deploy targets, handover, blueprints and the Agents page, for FDEs.
 
-**Phase 2:** a real golden-test run (the agent on a real PDF, a judge checking outcome and cited clauses), real GitHub repository listing, alerts and saving a failed run as a test, model comparison on the golden tests.
+**Added after that, for developers and FDEs:** pull requests from a coding agent checked by the golden tests, model comparison on the golden tests, and versioned blueprints rolled out across customers.
+
+**Phase 2:** a real golden-test run (the agent on a real PDF, a judge checking outcome and cited clauses), which then also powers real pull-request checks and model comparisons; the GitHub App and the MCP server for real; alerts and saving a failed run as a test.
 
 The architecture doc describes the full system: sandboxes, the durable build harness, the model gateway, the test service, GitHub and MCP integration, and the deploy pipeline.

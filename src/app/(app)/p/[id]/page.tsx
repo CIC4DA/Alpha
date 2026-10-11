@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { zipSync, strToU8 } from "fflate";
 import Link from "next/link";
-import { createProject, deleteProject, getOrg, getProject, invite, isDemo, saveBlueprint, saveJourney, updateProject, type Org, type Project, type Stage } from "@/lib/store";
+import { createProject, deleteProject, getOrg, listOrgs, switchOrg, getProject, invite, isDemo, saveBlueprint, saveJourney, updateProject, type Org, type Project, type Stage } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useJourney, type Journey } from "@/lib/journey";
 import { FILES, BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
@@ -14,6 +14,7 @@ import { PlanCanvas } from "@/components/workspace/plan";
 import { ConnectCanvas } from "@/components/workspace/connect";
 import { BuildCanvas } from "@/components/workspace/build";
 import type { AgentId } from "@/components/workspace/agents";
+import type { ModelRun } from "@/lib/devloop";
 import { TestCanvas, testCounts } from "@/components/workspace/test";
 import { ShipCanvas, liveHost } from "@/components/workspace/ship";
 import { DeveloperCanvas, type DevTab } from "@/components/workspace/developer";
@@ -133,8 +134,14 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     getProject(id)
-      .then((p) => {
+      .then(async (p) => {
         if (!p) return setError("This project doesn't exist, or you don't have access to it.");
+        // Opening a project from another workspace (a link, Blueprints) switches to that workspace.
+        const cur = await getOrg().catch(() => null);
+        if (p.orgId && cur && cur.id !== p.orgId && (await listOrgs()).some((o) => o.id === p.orgId)) switchOrg(p.orgId);
+        getOrg()
+          .then(setOrg)
+          .catch(() => {});
         setProject(p);
         const agent = new URLSearchParams(window.location.search).get("agent") as AgentId | null;
         if (agent && stageIndex(p.stage) >= stageIndex("build")) {
@@ -144,9 +151,6 @@ export default function WorkspacePage() {
         } else setViewing(p.stage);
       })
       .catch((e) => setError(e.message));
-    getOrg()
-      .then(setOrg)
-      .catch(() => {});
     const v = new URLSearchParams(window.location.search).get("view");
     if (v === "approver" || v === "developer") setView(v);
   }, [id]);
@@ -334,6 +338,25 @@ export default function WorkspacePage() {
       chat: [...p.chat, log(`Added the ${srv.name} MCP server. Its tools are available to this project's agents now; you'll find it under Agents, MCP servers and tools.`)],
     }));
 
+  const switchModel = (agent: AgentId, to: ModelRun, from: ModelRun, volume: number) => {
+    const now = new Date().toISOString();
+    const monthly = (to.costPerCase - from.costPerCase) * volume;
+    const name = { extraction: "Extraction", policy: "Policy", drafting: "Drafting" }[agent];
+    update((p) => ({
+      models: { ...(p.models ?? {}), [agent]: to.model },
+      version: p.buildDone >= BUILD_STEPS.length ? p.version + 1 : p.version,
+      chat: [
+        ...p.chat,
+        {
+          from: "architect" as const,
+          text: `The ${name} agent now runs on ${to.model}${p.buildDone >= BUILD_STEPS.length ? `, in version ${p.version + 1}` : ""}. It passed all 3 golden cases on outcome and reason. At ${volume} applications a month that's about $${Math.abs(monthly).toFixed(2)} ${monthly <= 0 ? "less" : "more"} than ${from.model}, and ${to.seconds < from.seconds ? "faster" : "slower"} per case (${to.seconds.toFixed(1)}s against ${from.seconds.toFixed(1)}s).`,
+          at: now,
+          commit: { sha: shortSha(), message: `${name} agent: ${from.model} to ${to.model}` },
+        },
+      ],
+    }));
+  };
+
   const browserTestToggle = (on: boolean) =>
     update((p) => ({
       browserTest: on,
@@ -389,6 +412,9 @@ export default function WorkspacePage() {
     },
   };
 
+  const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const repo = project ? `${slug(org?.name ?? "your-org")}/${slug(project.name)}` : "";
+
   const canvas = () => {
     if (view === "developer")
       return (
@@ -397,6 +423,33 @@ export default function WorkspacePage() {
           onTab={setDevTab}
           buildDone={j.buildDone}
           hasData={j.testRun !== "none"}
+          gh={{
+            connected: Boolean(j.github),
+            onConnect: () => update((p) => ({ github: true, chat: [...p.chat, log(`Connected GitHub: ${repo}. Pull requests from your editor now come back here, and I run the golden tests and the plan's rules on each before it can merge.`)] })),
+            repo,
+            version: j.version,
+            built: j.buildDone >= BUILD_STEPS.length,
+            approvalRequired: org?.approvalRequired ?? false,
+            prs: j.prs ?? {},
+            onPrState: (prId, state) => update((p) => ({ prs: { ...(p.prs ?? {}), [prId]: state } })),
+            onMerge: (pr) => {
+              const now = new Date().toISOString();
+              update((p) => ({
+                prs: { ...(p.prs ?? {}), [pr.id]: "merged" },
+                version: p.version + 1,
+                currentSha: undefined,
+                chat: [
+                  ...p.chat,
+                  {
+                    from: "architect" as const,
+                    text: `Merged pull request #${pr.number} from ${pr.from} as version ${p.version + 1}: "${pr.title}". All 6 golden checks and the plan's rules passed on the branch.${org?.approvalRequired ? " It goes live after this workspace's approver reviews it." : ""}`,
+                    at: now,
+                    commit: { sha: shortSha(), message: `Merge #${pr.number}: ${pr.title}` },
+                  },
+                ],
+              }));
+            },
+          }}
           initialFile={devFile}
           extraFiles={j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : []}
         />
@@ -459,7 +512,7 @@ export default function WorkspacePage() {
           />
         );
       case "build":
-        return <BuildCanvas done={j.buildDone} demo={j.demoData} onNext={() => goStage("test")} openAgent={openAgent} ext={{ mcpServers: j.mcpServers ?? [], tools: j.tools ?? [], onAddMcp: addMcp }} />;
+        return <BuildCanvas done={j.buildDone} demo={j.demoData} onNext={() => goStage("test")} openAgent={openAgent} ext={{ mcpServers: j.mcpServers ?? [], tools: j.tools ?? [], onAddMcp: addMcp, models: j.models ?? {}, onSwitchModel: switchModel }} />;
       case "test":
         return (
           <TestCanvas
@@ -505,6 +558,8 @@ export default function WorkspacePage() {
                 answers: j.answers,
                 suggestedOn: j.suggestedOn,
                 source: `${project.name}, built for ${org?.name ?? "your workspace"}`,
+                sourceProjectId: project.id,
+                sourceVersion: j.version,
               });
               update({ blueprintSaved: true });
             }}

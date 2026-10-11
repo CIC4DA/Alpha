@@ -284,10 +284,15 @@ function LiveCanvas({
           </h3>
           <p className="mt-1 text-sm text-ink-2">
             {j.blueprintSaved
-              ? "Saved. Start the next customer from it: Home, then Blueprints and templates."
+              ? "Saved. Start the next customer from it on Home. When this app improves, publish the change from Blueprints and roll it out to every customer on it."
               : "Reuse this app for your next customer. The plan, agents and golden tests come along; files, accounts and data never do."}
           </p>
         </div>
+        {j.blueprintSaved && (
+          <Link href="/blueprints" className="shrink-0 text-sm font-medium text-blue hover:underline">
+            Open Blueprints
+          </Link>
+        )}
         {!j.blueprintSaved && (
           <Button className="shrink-0" disabled={busy !== null} onClick={() => run("blueprint", onSaveBlueprint)}>
             {busy === "blueprint" ? <Loader2 size={15} className="animate-spin" /> : null} Save blueprint

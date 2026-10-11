@@ -172,7 +172,18 @@ We build it on [LiteLLM](https://docs.litellm.ai/docs/), which already gives one
 | Quality changes silently | No switch goes live without passing the tests (below) |
 | A provider has an outage | Ordered fallbacks per capability, across providers |
 
-**Switching is gated by tests.** For Architect's own harness, a new model joins the routing table only after it passes our evaluation suite: a fixed set of reference projects built end to end. For an agent inside a user's app, picking a new model in the agent panel runs that app's golden tests on both models and shows quality and cost side by side before the switch applies.
+**Switching is gated by tests.** For Architect's own harness, a new model joins the routing table only after it passes our evaluation suite: a fixed set of reference projects built end to end.
+
+**Comparing models for one agent.** An FDE picks a model per agent per customer, trading accuracy, cost, speed and where the data goes. From the agent panel they choose the candidates; the Test service runs the agent's golden cases on each one in parallel, all through the gateway, in a test sandbox:
+
+| Measured | From |
+| --- | --- |
+| Pass or fail per case, on outcome and on reason | The same judging as every test run (exact checks, then the judge model) |
+| Cost per case, and per month at the customer's volume | The gateway's cost records for the comparison runs |
+| Median time per case | The gateway's trace timings |
+| Where it runs | The capability registry: provider region, or self-hosted in the customer's cloud |
+
+A model can be switched in only if it passes every case; a cheaper model that cites the wrong clause is shown, with the reason it failed, but can't be selected. The switch is a one-line commit to the agent's `agent.yaml`, so it becomes a version like any other change: it can be reverted, and it goes through the workspace's approval rule before it reaches production.
 
 **Keys never leave the gateway.** Organisations can use Lyzr-managed keys or bring their own. Keys live in the gateway's vault. Sandboxes and deployed apps call the gateway with a short-lived project token, so no provider key ever appears in generated code.
 
@@ -273,7 +284,15 @@ Every project already has a repository in Architect's own **Git service**, so pr
 
 **The MCP server.** A remote MCP server at `mcp.architect.new` follows the [MCP authorization specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization): OAuth 2.1 with PKCE through the organisation's sign-in, tokens bound to the MCP server as their audience and scoped to one project, and no token passed through to downstream services.
 
-Its tools (read the plan, list and run tests, read traces, update an agent, start a preview, request review, deploy) are thin wrappers over the same internal API the web app uses. There is no side door: roles, approval rules, budgets and the audit log apply exactly as they do in the browser. The CLI uses the same API.
+Its tools (read the plan, list and run tests, read traces, read the checks on a pull request, update an agent, start a preview, request review, deploy) are thin wrappers over the same internal API the web app uses. There is no side door: roles, approval rules, budgets and the audit log apply exactly as they do in the browser. The CLI uses the same API.
+
+**Pull requests from a coding agent.** This is the loop that lets a developer stay in Cursor, Claude Code or Codex without Architect losing track of what changed.
+
+1. The developer's agent pushes a branch and opens a pull request. The GitHub App's webhook reaches the **GitHub sync service**.
+2. It checks the branch out into a test sandbox, with a database branch, and asks the **Test service** for a full run: every golden case on outcome and reason, plus the plan's rules. Rules are checked the same way as in a build: each rule the builder picked is an assertion in the golden cases ("an officer confirms every decision" fails if a decision has `confirmed_by: auto`).
+3. The result is posted as a required GitHub check named *Architect golden tests*, and as a review comment listing each failing case or rule with its reason. The coding agent reads that comment, or the same result through MCP, and pushes a fix; every push re-runs the checks.
+4. In Architect's Developer view the pull request shows the diff, the per-case results and the rules. Merge is disabled while any check fails, in Architect and in GitHub, through branch protection on the required check.
+5. A merge becomes an Architect version, with a commit card in chat like a change made there. It goes through the workspace's approval rule before it can be deployed, so code written outside Architect gets the same review as code written inside it.
 
 ## Workspaces, handover and blueprints
 
@@ -288,6 +307,10 @@ An FDE works across customers, so the unit of isolation is the **workspace**: on
 **Handover.** Nothing moves at handover. The customer's people are invited into the workspace where the app already lives, and an admin role can pass to them. The Git service writes `HANDOVER.md` from the repo (agents, rules, golden tests, where it runs, how changes flow), so it can't drift from what was built.
 
 **Blueprints.** A blueprint is a template repo in the FDE's own library: the plan, the GitAgent folders, the golden-test definitions and the plan's answers. It never contains the customer's files, connection references, data or test fixtures. The Git service builds it from an allowlist of paths, and a scan for secrets and personal data runs before it is saved. Starting from a blueprint creates a new repo in the current workspace with Connect empty, so the new customer's golden tests run on their own files.
+
+**Blueprints are versioned, and customers can be brought up to date.** A blueprint keeps a link to the project it was saved from. When that project improves, the FDE publishes the change: the Git service diffs the allowlisted paths since the last published version, runs the same secrets and personal-data scan, and tags the blueprint repo with the next version and a changelog line. Each customer project records the blueprint and version it is on in `.architect/config.yaml` (`blueprint: loan-triage-desk@2`), so the Blueprints page can show every customer project across the FDE's workspaces and which ones are behind.
+
+Rolling out a version to a customer is a three-way merge of the blueprint's diff into that customer's repo, on its own branch. The Test service runs the golden tests on that customer's own files, and the change follows that workspace's approval rule, so a customer that requires a separate approver signs it off like any other version. Customer-specific edits are kept; if the merge conflicts, the change waits as a pull request instead of being forced. Once a customer has been handed over and the FDE is no longer a member, a roll-out can only be offered as a pull request for the customer's own builder to accept.
 
 **The Agents page replaces Studio.** It reads run counts, cost and failures per agent from the agent runtime's run log and the gateway's cost records, filtered to the workspace. Editing an agent there or in its project commits to its GitAgent folder and goes through the golden tests like any other change. Studio's runtime stays underneath; users never open it.
 
