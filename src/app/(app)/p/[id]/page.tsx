@@ -7,7 +7,7 @@ import Link from "next/link";
 import { createProject, deleteProject, getOrg, listOrgs, switchOrg, getProject, invite, isDemo, saveBlueprint, saveJourney, updateProject, type Org, type Project, type Stage } from "@/lib/store";
 import { useAuth } from "@/lib/auth";
 import { useJourney, type Journey } from "@/lib/journey";
-import { FILES, BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
+import { BUILD_STEPS, CONNECT_ITEMS, QUESTIONS, RECEIPT, GOLDEN, CHANGE_COST } from "@/lib/fixtures";
 import { TopBar, STAGES, stageIndex, type View, type ProjectActions } from "@/components/workspace/topbar";
 import { ChatPane, type ChatItem, type ChatMode, type Todo } from "@/components/workspace/chat";
 import { PlanCanvas } from "@/components/workspace/plan";
@@ -18,6 +18,8 @@ import type { ModelRun } from "@/lib/devloop";
 import { TestCanvas, testCounts } from "@/components/workspace/test";
 import { ShipCanvas, liveHost } from "@/components/workspace/ship";
 import { DeveloperCanvas, type DevTab } from "@/components/workspace/developer";
+import type { DevCtx } from "@/components/workspace/devtools";
+import { goldenResults, projectFiles, rulesFile } from "@/lib/devkit";
 import { ApproverCanvas } from "@/components/workspace/approver";
 
 const label = (qid: string, ids: string[]) => {
@@ -370,8 +372,7 @@ export default function WorkspacePage() {
     refresh: () => setRefreshKey((k) => k + 1),
     download: () => {
       const files: Record<string, Uint8Array> = {};
-      const extra = j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : [];
-      for (const f of [...extra, ...FILES]) files[f.path] = strToU8(f.body);
+      for (const f of projectFiles(j, extraFiles)) files[f.path] = strToU8(f.body);
       const blob = new Blob([zipSync(files) as BlobPart], { type: "application/zip" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
@@ -415,6 +416,40 @@ export default function WorkspacePage() {
   const slug = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const repo = project ? `${slug(org?.name ?? "your-org")}/${slug(project.name)}` : "";
 
+  const extraFiles = project && j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : [];
+  const devCtx: DevCtx = {
+    j,
+    projectId: id,
+    projectName: project?.name ?? "",
+    extraFiles,
+    approvalRequired: org?.approvalRequired ?? false,
+    saveFile: (path, body, message) =>
+      update((p) => {
+        const built = p.buildDone >= BUILD_STEPS.length;
+        const v = built ? p.version + 1 : p.version;
+        const r = goldenResults(p);
+        const tests = !built ? "It's part of the first build." : r ? `The golden tests ran on it: ${r.passed} of ${r.total} checks pass, as before.` : "The golden tests run on it once you add sample files.";
+        return {
+          fileEdits: { ...(p.fileEdits ?? {}), [path]: body },
+          version: v,
+          currentSha: undefined,
+          chat: [...p.chat, { from: "architect" as const, text: `${message.startsWith("Add") ? "Added" : "Saved"} ${path}${built ? ` as version ${v}` : ""}, edited in the Developer view. ${tests}`, at: new Date().toISOString(), ...(built ? { commit: { sha: shortSha(), message } } : {}) }],
+        };
+      }),
+    setEnvs: (envs, note) => update((p) => ({ envs, ...(note ? { chat: [...p.chat, log(note)] } : {}) })),
+    applyDebugFix: (rules) => {
+      update((p) => ({
+        fileEdits: { ...(p.fileEdits ?? {}), "agents/policy-agent/RULES.md": rulesFile(rules) },
+        testRun: "fixed",
+        fixAttempts: p.fixAttempts + 1,
+        chat: [...p.chat, log("That fix came from the debugger in the Developer view: a developer added the rule to agents/policy-agent/RULES.md and re-ran the case.")],
+      }));
+      const c = testCounts("fixed");
+      persist({ testsPassed: c.passed, testsTotal: c.total, spendUsd: RECEIPT.build + RECEIPT.tests });
+    },
+    setApiKeys: (apiKeys, note) => update((p) => ({ apiKeys, ...(note ? { chat: [...p.chat, log(note)] } : {}) })),
+  };
+
   const canvas = () => {
     if (view === "developer")
       return (
@@ -451,7 +486,7 @@ export default function WorkspacePage() {
             },
           }}
           initialFile={devFile}
-          extraFiles={j.handover ? [{ path: "HANDOVER.md", body: handoverDoc(project, org, j.version) }] : []}
+          ctx={devCtx}
         />
       );
     if (view === "approver")

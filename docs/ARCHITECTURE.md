@@ -314,6 +314,21 @@ Rolling out a version to a customer is a three-way merge of the blueprint's diff
 
 **The Agents page replaces Studio.** It reads run counts, cost and failures per agent from the agent runtime's run log and the gateway's cost records, filtered to the workspace. Editing an agent there or in its project commits to its GitAgent folder and goes through the golden tests like any other change. Studio's runtime stays underneath; users never open it.
 
+## The developer surface
+
+A developer can do the whole job inside Architect, and every tool here works on the same repo, sandbox and tests as the builder's chat and the developer's own coding agent.
+
+| Tool | How it works |
+| --- | --- |
+| Editor | Files open from the project repo. Saving commits to the **Git service** as a new version, runs the golden tests, and follows the approval rule like any other change. |
+| Terminal | A shell in the project's own sandbox microVM, streamed over a WebSocket. It has the repo, the CLI and preview credentials only; production secrets never enter it. |
+| Debugger | Every run is recorded step by step: what each agent received and returned. Re-running a case after editing one agent replays the recorded inputs to that step, so only the changed agent calls a model (about a cent). Applying the change commits it, and the full golden suite runs before it can ship. |
+| Environments | Preview, staging and production each have their own settings and their own vault paths for secrets. Promotion shows the diff; secrets are never copied between environments. Production settings apply with the next approved deploy. |
+| Agents API | The **API gateway** gives each project endpoints for its whole flow and for each agent, generated from the agents' input and output schemas, with an OpenAPI spec. Keys are stored hashed and bound to one environment, so a test key can never reach production. Each call runs the version live in that environment, is rate-limited per key, traced and metered. |
+| MCP server | The same tools over MCP (below), for Claude Code, Cursor or Codex. |
+
+**What the prototype runs for real.** The agents API answers at `/api/v1/projects/<id>/…` from a fixed rule set that follows the lending policy clause by clause, so any HTTP client can call it; keys are not checked yet. The MCP server at `/api/mcp/<project id>` is real: a coding agent signed in with the person's own Architect token can read and write files, change an agent's rules or model, set environment settings, run the golden tests and request review, and each change appears in the project's chat as a version. Row-level security gives it exactly the access the person has. The production server would use OAuth 2.1 instead of a copied token, which expires after an hour. Edits, environments, API keys and debugger fixes are saved with the project; the terminal and the test results are simulated against that saved state.
+
 ## Deploying user apps
 
 Deploy is a pipeline run by the **Deploy service** as a durable workflow; each stage gates the next. A preview is a dev server in a sandbox, so nothing is promoted from it directly: production always gets a fresh production build that has passed its tests.

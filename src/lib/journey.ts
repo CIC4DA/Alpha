@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadJourney, saveJourney } from "./store";
+import { isDemo, loadJourney, saveJourney } from "./store";
 import type { PrState } from "./devloop";
+import type { ApiKey, EnvName, EnvVar } from "./devkit";
 
 export type PlanItem = { name: string; detail: string };
 export type PlanEdit = { summary: string; screens: PlanItem[]; agents: PlanItem[]; rules: string[] };
@@ -41,6 +42,9 @@ export type Journey = {
   models?: Partial<Record<string, string>>; // agent id -> model it runs on, after a tested switch
   blueprintId?: string; // started from this blueprint
   blueprintVersion?: number; // ...at this blueprint version
+  fileEdits?: Record<string, string>; // path -> body, edited in the Developer view, the terminal or over MCP
+  envs?: Partial<Record<EnvName, EnvVar[]>>; // settings per environment
+  apiKeys?: ApiKey[]; // only a prefix of each key is kept
 };
 
 const empty: Journey = {
@@ -84,8 +88,24 @@ export function useJourney(projectId: string) {
     load();
     const onVisible = () => document.visibilityState === "visible" && !saveTimer.current && load();
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [load]);
+    // With real accounts, changes can also arrive from a coding agent over MCP: check every few seconds.
+    const poll = setInterval(async () => {
+      if (isDemo() || document.visibilityState !== "visible" || saveTimer.current) return;
+      try {
+        const stored = await loadJourney(projectId);
+        if (!stored || saveTimer.current) return;
+        const next = { ...empty, ...stored } as Journey;
+        if (JSON.stringify(next) !== JSON.stringify(latest.current)) {
+          latest.current = next;
+          setJ(next);
+        }
+      } catch {}
+    }, 4000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(poll);
+    };
+  }, [load, projectId]);
 
   const update = useCallback(
     (patch: Partial<Journey> | ((prev: Journey) => Partial<Journey>)) => {

@@ -86,6 +86,9 @@ export function TestCanvas({ run, fixAttempts, onRun, onFix, onShip, onTrace }: 
                             {busy === "fix" ? <Loader2 size={14} className="animate-spin" /> : <Wrench size={14} />} {busy === "fix" ? "Fixing and re-running" : "Fix it"}
                           </Button>
                           <span className="text-[12px] text-ink-3">Free: the mistake is ours. Attempt {fixAttempts + 1} of 3.</span>
+                          <button onClick={onTrace} className="text-[13px] text-blue hover:underline">
+                            Or debug it yourself
+                          </button>
                         </div>
                       )}
                     </div>
